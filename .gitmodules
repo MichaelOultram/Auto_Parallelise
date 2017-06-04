@@ -1,0 +1,3 @@
+[submodule "redox"]
+	path = redox
+	url = https://github.com/redox-os/redox
