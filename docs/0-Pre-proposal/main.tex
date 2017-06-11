@@ -1,36 +1,35 @@
 \documentclass[11pt, a4paper]{article}
 \usepackage{mystyle}
 
-\title{\huge\textbf{Final Year Project}\vspace{-4ex}}
+\title{\huge\textbf{FYP Idea}\vspace{-4ex}}
 \date{}
 
 \begin{document}
 \maketitle
 
-\section{Idea}
-Combine the resources of two separate machines into one.
-Each user-land process can access the resources of either machine.
+Combine the resources of two separate machines into one. Each individual 
+user-land process will be executed on one machine but it can access the 
+resources of either machines. 
 
-\section{How it will be achieved}
-I plan to use an existing open-source micro-kernel operating system (Redox).
+\textbf{Example}: Since this is a microkernel, the filesystem is in userspace. 
+All the drives of all the machines will be visible to the filesystem. When the 
+filesystem tries to access a drive, it sends the request to the kernel. If this 
+drive is local the kernel can perform the action as normal. If the drive is 
+remote, the kernel can forward the request to the other kernel.
 
-I would change the process queue to be shared between the two kernels. When a 
-kernel allows a process to run, it'll choose a process from this shared queue. 
+The main ``in-depth" part of the project is designing the algorithm for 
+choosing which process should run where. Accessing resources from a different 
+kernel is likely to significantly slower than if the resource was local. So 
+processes should be run on the machine that they use the most resources from. 
+Problem: this isn't known before the program starts accessing resources. It may 
+be possible to transfer execution of a process from one machine to another, but 
+again this will take some time (have to copy memory).
 
-Which kernel should run which process? If one kernel has a resource that the 
-process wants, maybe that kernel should run the process and not the other one.
-
-If a process is running that needs access to a resource on the
-
-\section{Project Inspiration}
-Moore's law is coming to an end (or so the internet says).
-
-Consolidate all resources into one ``system".
-
-Sounded cool
-
-\section{Project Rough Plan}
+\textbf{Project Rough Plan}
 \begin{itemize}
+	\item Download and compile Redox (an existing microkernel OS written in 
+	Rust)
+	
 	\item Create a communication link between the two (or more) kernels
 	
 	\item Produce a distributed queue
@@ -51,8 +50,12 @@ Sounded cool
 	\item Allow an already started process to change kernel by copying the 
 	processes memory.
 	
-	\item Deal with kernel drop-out somehow?
-	
 \end{itemize}
+
+\textbf{Extensions}: To simplify the project I will initially use two kernels 
+which are connected together on a LAN. I'll assume that both kernels remain 
+online, and the communication be relatively instantaneous. However, if the 
+project needs extending, I could increase the number of running kernels and I 
+could also look into how to resolve when a kernel disconnects unexpectedly.
 
 \end{document}
