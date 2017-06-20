@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 cd "${0%/*}" # cd into current repo
 
 # Download redox
