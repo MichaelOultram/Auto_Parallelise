@@ -5,13 +5,14 @@
 
 //#![deny(warnings)]
 #![feature(alloc)]
+#![feature(allocator_api)]
 #![feature(asm)]
 #![feature(collections)]
 #![feature(concat_idents)]
 #![feature(const_fn)]
 #![feature(core_intrinsics)]
 #![feature(drop_types_in_const)]
-#![feature(heap_api)]
+#![feature(global_allocator)]
 #![feature(integer_atomics)]
 #![feature(lang_items)]
 #![feature(naked_functions)]
@@ -103,6 +104,12 @@ pub mod time;
 #[cfg(test)]
 pub mod tests;
 
+#[global_allocator]
+static ALLOCATOR: allocator::Allocator = allocator::Allocator;
+
+#[cfg(feature = "multi_core")]
+static MULTI_CORE_IS_NOT_SUPPORTED_AT_THE_MOMENT: u8 = ();
+
 /// A unique number that identifies the current CPU - used for scheduling
 #[thread_local]
 static CPU_ID: AtomicUsize = ATOMIC_USIZE_INIT;
@@ -172,6 +179,7 @@ pub extern fn kmain(cpus: usize) {
 
 /// This is the main kernel entry point for secondary CPUs
 #[no_mangle]
+#[allow(unreachable_code, unused_variables)]
 pub extern fn kmain_ap(id: usize) {
     loop {
         unsafe {
@@ -179,26 +187,28 @@ pub extern fn kmain_ap(id: usize) {
             interrupt::halt();
         }
     }
-    /*
-    CPU_ID.store(id, Ordering::SeqCst);
 
-    context::init();
+    if cfg!(feature = "multi_core"){
+        CPU_ID.store(id, Ordering::SeqCst);
 
-    let pid = syscall::getpid();
-    println!("AP {}: {:?}", id, pid);
+        context::init();
 
-    loop {
-        unsafe {
-            interrupt::disable();
-            if context::switch() {
-                interrupt::enable_and_nop();
-            } else {
-                // Enable interrupts, then halt CPU (to save power) until the next interrupt is actually fired.
-                interrupt::enable_and_halt();
+        let pid = syscall::getpid();
+        println!("AP {}: {:?}", id, pid);
+
+        loop {
+            unsafe {
+                interrupt::disable();
+                if context::switch() {
+                    interrupt::enable_and_nop();
+                } else {
+                    // Enable interrupts, then halt CPU (to save power) until the next interrupt is actually fired.
+                    interrupt::enable_and_halt();
+                }
             }
         }
     }
-    */
+
 }
 
 /// Allow exception handlers to send signal to arch-independant kernel

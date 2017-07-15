@@ -1,6 +1,7 @@
 use alloc::arc::Arc;
 use alloc::boxed::Box;
 use collections::{BTreeMap, Vec, VecDeque};
+use core::mem;
 use spin::Mutex;
 
 use context::arch;
@@ -8,7 +9,8 @@ use context::file::File;
 use context::memory::{Grant, Memory, SharedMemory, Tls};
 use device;
 use scheme::{SchemeNamespace, FileHandle};
-use syscall::data::Event;
+use syscall::data::{Event, SigAction};
+use syscall::flag::SIG_DFL;
 use sync::{WaitMap, WaitQueue};
 
 /// Unique identifier for a context (i.e. `pid`).
@@ -63,12 +65,18 @@ pub struct Context {
     pub kfx: Option<Box<[u8]>>,
     /// Kernel stack
     pub kstack: Option<Box<[u8]>>,
+    /// Kernel signal backup
+    pub ksig: Option<(arch::Context, Option<Box<[u8]>>, Option<Box<[u8]>>)>,
+    /// Restore ksig context on next switch
+    pub ksig_restore: bool,
     /// Executable image
     pub image: Vec<SharedMemory>,
     /// User heap
     pub heap: Option<SharedMemory>,
     /// User stack
     pub stack: Option<Memory>,
+    /// User signal stack
+    pub sigstack: Option<Memory>,
     /// User Thread local storage
     pub tls: Option<Tls>,
     /// User grants
@@ -82,7 +90,9 @@ pub struct Context {
     /// The process environment
     pub env: Arc<Mutex<BTreeMap<Box<[u8]>, Arc<Mutex<Vec<u8>>>>>>,
     /// The open files in the scheme
-    pub files: Arc<Mutex<Vec<Option<File>>>>
+    pub files: Arc<Mutex<Vec<Option<File>>>>,
+    /// Singal actions
+    pub actions: Arc<Mutex<Vec<(SigAction, usize)>>>,
 }
 
 impl Context {
@@ -106,16 +116,27 @@ impl Context {
             arch: arch::Context::new(),
             kfx: None,
             kstack: None,
+            ksig: None,
+            ksig_restore: false,
             image: Vec::new(),
             heap: None,
             stack: None,
+            sigstack: None,
             tls: None,
             grants: Arc::new(Mutex::new(Vec::new())),
             name: Arc::new(Mutex::new(Vec::new())),
             cwd: Arc::new(Mutex::new(Vec::new())),
             events: Arc::new(WaitQueue::new()),
             env: Arc::new(Mutex::new(BTreeMap::new())),
-            files: Arc::new(Mutex::new(Vec::new()))
+            files: Arc::new(Mutex::new(Vec::new())),
+            actions: Arc::new(Mutex::new(vec![(
+                SigAction {
+                    sa_handler: unsafe { mem::transmute(SIG_DFL) },
+                    sa_mask: [0; 2],
+                    sa_flags: 0,
+                },
+                0
+            ); 128])),
         }
     }
 

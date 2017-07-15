@@ -1,9 +1,12 @@
+use core::mem;
 use core::sync::atomic::Ordering;
 use context::{arch, contexts, Context, Status, CONTEXT_ID};
-use interrupt::irq::PIT_TICKS;
+use start::usermode;
+use syscall::flag::{SIG_DFL, SIG_IGN};
 
 use gdt;
 use interrupt;
+use interrupt::irq::PIT_TICKS;
 use syscall;
 use time;
 
@@ -42,6 +45,29 @@ pub unsafe fn switch() -> bool {
             if context.cpu_id == None && cpu_id == 0 {
                 context.cpu_id = Some(cpu_id);
                 // println!("{}: take {} {}", cpu_id, context.id, ::core::str::from_utf8_unchecked(&context.name.lock()));
+            }
+
+            if context.ksig_restore {
+                println!("Restore from ksig");
+
+                let ksig = context.ksig.take().expect("context::switch: ksig not set with ksig_restore");
+                context.arch = ksig.0;
+                if let Some(ref mut kfx) = context.kfx {
+                    kfx.clone_from_slice(&ksig.1.expect("context::switch: ksig kfx not set with ksig_restore"));
+                } else {
+                    panic!("context::switch: kfx not set with ksig_restore");
+                }
+                if let Some(ref mut kstack) = context.kstack {
+                    kstack.clone_from_slice(&ksig.2.expect("context::switch: ksig kstack not set with ksig_restore"));
+                } else {
+                    panic!("context::switch: kstack not set with ksig_restore");
+                }
+                context.ksig_restore = false;
+
+                //TODO: Interrupt
+                if context.status == Status::Blocked {
+                    context.unblock();
+                }
             }
 
             if context.status == Status::Blocked && !context.pending.is_empty() {
@@ -109,7 +135,13 @@ pub unsafe fn switch() -> bool {
     arch::CONTEXT_SWITCH_LOCK.store(false, Ordering::SeqCst);
 
     if let Some(sig) = to_sig {
-        println!("Handle {}", sig);
+        //TODO: Allow nested signals
+        assert!((&mut *to_ptr).ksig.is_none());
+
+        let arch = (&mut *to_ptr).arch.clone();
+        let kfx = (&mut *to_ptr).kfx.clone();
+        let kstack = (&mut *to_ptr).kstack.clone();
+        (&mut *to_ptr).ksig = Some((arch, kfx, kstack));
         (&mut *to_ptr).arch.signal_stack(signal_handler, sig);
     }
 
@@ -118,7 +150,34 @@ pub unsafe fn switch() -> bool {
     true
 }
 
-extern "C" fn signal_handler(signal: usize) {
-    println!("Signal handler: {}", signal);
-    syscall::exit(signal);
+extern "C" fn signal_handler(sig: usize) {
+    let (action, restorer) = {
+        let contexts = contexts();
+        let context_lock = contexts.current().expect("context::signal_handler not inside of context");
+        let context = context_lock.read();
+        let actions = context.actions.lock();
+        actions[sig]
+    };
+
+    let handler = action.sa_handler as usize;
+    println!("Handler {:X}: {:X}", sig, handler);
+    if handler == SIG_DFL {
+        println!("Exit {:X}", sig);
+        syscall::exit(sig);
+    } else if handler == SIG_IGN {
+        println!("Ignore");
+    } else {
+        println!("Call {:X}", handler);
+
+        unsafe {
+            let mut sp = ::USER_SIGSTACK_OFFSET + ::USER_SIGSTACK_SIZE - 256;
+
+            sp = (sp / 16) * 16;
+
+            sp -= mem::size_of::<usize>();
+            *(sp as *mut usize) = restorer;
+
+            usermode(handler, sp, sig);
+        }
+    }
 }

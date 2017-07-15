@@ -1,6 +1,8 @@
 ///! Process syscalls
+use alloc::allocator::{Alloc, Layout};
 use alloc::arc::Arc;
 use alloc::boxed::Box;
+use alloc::heap::Heap;
 use collections::{BTreeMap, Vec};
 use core::{intrinsics, mem, str};
 use core::ops::DerefMut;
@@ -16,9 +18,9 @@ use context::ContextId;
 use elf::{self, program_header};
 use scheme::{self, FileHandle};
 use syscall;
-use syscall::data::Stat;
+use syscall::data::{SigAction, Stat};
 use syscall::error::*;
-use syscall::flag::{CLONE_VFORK, CLONE_VM, CLONE_FS, CLONE_FILES, O_CLOEXEC, WNOHANG};
+use syscall::flag::{CLONE_VFORK, CLONE_VM, CLONE_FS, CLONE_FILES, CLONE_SIGHAND, O_CLOEXEC, SIG_DFL, WNOHANG};
 use syscall::validate::{validate_slice, validate_slice_mut};
 
 pub fn brk(address: usize) -> Result<usize> {
@@ -77,12 +79,14 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
         let mut image = vec![];
         let mut heap_option = None;
         let mut stack_option = None;
+        let mut sigstack_option = None;
         let mut tls_option = None;
         let grants;
         let name;
         let cwd;
         let env;
         let files;
+        let actions;
 
         // Copy from old process
         {
@@ -105,7 +109,7 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
             arch = context.arch.clone();
 
             if let Some(ref fx) = context.kfx {
-                let mut new_fx = unsafe { Box::from_raw(::alloc::heap::allocate(512, 16) as *mut [u8; 512]) };
+                let mut new_fx = unsafe { Box::from_raw(Heap.alloc(Layout::from_size_align_unchecked(512, 16)).unwrap() as *mut [u8; 512]) };
                 for (new_b, b) in new_fx.iter_mut().zip(fx.iter()) {
                     *new_b = *b;
                 }
@@ -192,6 +196,24 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
                 stack_option = Some(new_stack);
             }
 
+            if let Some(ref sigstack) = context.sigstack {
+                let mut new_sigstack = context::memory::Memory::new(
+                    VirtualAddress::new(::USER_TMP_SIGSTACK_OFFSET),
+                    sigstack.size(),
+                    entry::PRESENT | entry::NO_EXECUTE | entry::WRITABLE,
+                    false
+                );
+
+                unsafe {
+                    intrinsics::copy(sigstack.start_address().get() as *const u8,
+                                    new_sigstack.start_address().get() as *mut u8,
+                                    sigstack.size());
+                }
+
+                new_sigstack.remap(sigstack.flags());
+                sigstack_option = Some(new_sigstack);
+            }
+
             if let Some(ref tls) = context.tls {
                 let mut new_tls = context::memory::Tls {
                     master: tls.master,
@@ -247,6 +269,12 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
             } else {
                 files = Arc::new(Mutex::new(context.files.lock().clone()));
             }
+
+            if flags & CLONE_SIGHAND == CLONE_SIGHAND {
+                actions = context.actions.clone();
+            } else {
+                actions = Arc::new(Mutex::new(context.actions.lock().clone()));
+            }
         }
 
         // If not cloning files, dup to get a new number from scheme
@@ -260,7 +288,7 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
                             let scheme = schemes.get(file.scheme).ok_or(Error::new(EBADF))?;
                             scheme.clone()
                         };
-                        scheme.dup(file.number, b"clone")
+                        scheme.dup(file.number, b"")
                     };
                     match result {
                         Ok(new_number) => {
@@ -350,6 +378,8 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
                 context.kstack = Some(stack);
             }
 
+            // TODO: Clone ksig?
+
             // Setup heap
             if flags & CLONE_VM == CLONE_VM {
                 // Copy user image mapping, if found
@@ -432,6 +462,12 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
                 context.stack = Some(stack);
             }
 
+            // Setup user sigstack
+            if let Some(mut sigstack) = sigstack_option {
+                sigstack.move_to(VirtualAddress::new(::USER_SIGSTACK_OFFSET), &mut new_table, &mut temporary_page);
+                context.sigstack = Some(sigstack);
+            }
+
             // Setup user TLS
             if let Some(mut tls) = tls_option {
                 tls.mem.move_to(VirtualAddress::new(::USER_TLS_OFFSET), &mut new_table, &mut temporary_page);
@@ -445,6 +481,8 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
             context.env = env;
 
             context.files = files;
+
+            context.actions = actions;
         }
     }
 
@@ -459,12 +497,14 @@ fn empty(context: &mut context::Context, reaping: bool) {
         assert!(context.image.is_empty());
         assert!(context.heap.is_none());
         assert!(context.stack.is_none());
+        assert!(context.sigstack.is_none());
         assert!(context.tls.is_none());
     } else {
         // Unmap previous image, heap, grants, stack, and tls
         context.image.clear();
         drop(context.heap.take());
         drop(context.stack.take());
+        drop(context.sigstack.take());
         drop(context.tls.take());
     }
 
@@ -544,10 +584,13 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
 
             if data.starts_with(b"#!") {
                 if let Some(line) = data[2..].split(|&b| b == b'\n').next() {
+                    // Strip whitespace
+                    let line = &line[line.iter().position(|&b| b != b' ')
+                                         .unwrap_or(0)..];
                     if ! args.is_empty() {
                         args.remove(0);
                     }
-                    args.insert(0, canonical);
+                    args.insert(0, path.to_vec());
                     args.insert(0, line.to_vec());
                     canonical = {
                         let contexts = context::contexts();
@@ -662,6 +705,14 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
                         true
                     ));
 
+                    // Map stack
+                    context.sigstack = Some(context::memory::Memory::new(
+                        VirtualAddress::new(::USER_SIGSTACK_OFFSET),
+                        ::USER_SIGSTACK_SIZE,
+                        entry::NO_EXECUTE | entry::WRITABLE | entry::USER_ACCESSIBLE,
+                        true
+                    ));
+
                     // Map TLS
                     if let Some((master, file_size, size)) = tls_option {
                         let tls = context::memory::Tls {
@@ -726,12 +777,21 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
                     let files = Arc::new(Mutex::new(context.files.lock().clone()));
                     context.files = files.clone();
 
+                    context.actions = Arc::new(Mutex::new(vec![(
+                        SigAction {
+                            sa_handler: unsafe { mem::transmute(SIG_DFL) },
+                            sa_mask: [0; 2],
+                            sa_flags: 0,
+                        },
+                        0
+                    ); 128]));
+
                     let vfork = context.vfork;
                     context.vfork = false;
                     (vfork, context.ppid, files)
                 };
 
-                // Duplicate current files using b"exec", close previous
+                // Duplicate current files, close previous
                 for (fd, mut file_option) in files.lock().iter_mut().enumerate() {
                     let new_file_option = if let Some(ref file) = *file_option {
                         // Duplicate
@@ -744,7 +804,7 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
                                     schemes.get(file.scheme).map(|scheme| scheme.clone())
                                 };
                                 if let Some(scheme) = scheme_option {
-                                    scheme.dup(file.number, b"exec")
+                                    scheme.dup(file.number, b"")
                                 } else {
                                     Err(Error::new(EBADF))
                                 }
@@ -806,7 +866,7 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
     }
 
     // Go to usermode
-    unsafe { usermode(entry, sp); }
+    unsafe { usermode(entry, sp, 0); }
 }
 
 pub fn exit(status: usize) -> ! {
@@ -925,6 +985,13 @@ pub fn getpid() -> Result<ContextId> {
     Ok(context.id)
 }
 
+pub fn getppid() -> Result<ContextId> {
+    let contexts = context::contexts();
+    let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
+    let context = context_lock.read();
+    Ok(context.ppid)
+}
+
 pub fn kill(pid: ContextId, sig: usize) -> Result<usize> {
     let (ruid, euid) = {
         let contexts = context::contexts();
@@ -949,6 +1016,43 @@ pub fn kill(pid: ContextId, sig: usize) -> Result<usize> {
     } else {
         Err(Error::new(EINVAL))
     }
+}
+
+pub fn sigaction(sig: usize, act_opt: Option<&SigAction>, oldact_opt: Option<&mut SigAction>, restorer: usize) -> Result<usize> {
+    if sig > 0 && sig <= 0x7F {
+        let contexts = context::contexts();
+        let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
+        let context = context_lock.read();
+        let mut actions = context.actions.lock();
+
+        if let Some(oldact) = oldact_opt {
+            *oldact = actions[sig].0;
+        }
+
+        if let Some(act) = act_opt {
+            actions[sig] = (*act, restorer);
+        }
+
+        Ok(0)
+    } else {
+        Err(Error::new(EINVAL))
+    }
+}
+
+pub fn sigreturn() -> Result<usize> {
+    println!("Sigreturn");
+
+    {
+        let contexts = context::contexts();
+        let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
+        let mut context = context_lock.write();
+        context.ksig_restore = true;
+        context.block();
+    }
+
+    unsafe { context::switch(); }
+
+    unreachable!();
 }
 
 fn reap(pid: ContextId) -> Result<ContextId> {
