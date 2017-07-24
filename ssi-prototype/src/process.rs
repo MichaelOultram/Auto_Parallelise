@@ -12,28 +12,30 @@ pub struct Instruction {
     cycles: u32,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
-pub enum State {
-    STARTED,
-    READY,
-    RUNNING,
-    WAITING,
-    TERMINATED,
+/// The status of a context - used for scheduling
+/// See syscall::process::waitpid and the sync module for examples of usage
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
+pub enum Status {
+    Runnable,
+    Blocked,
+    Exited(usize)
 }
 
 #[derive(Serialize)]
 pub struct Process {
-    name : String,
-    state : State,
-    program : Vec<Instruction>,
-    machine : Option<u32>,
+    pub name : String,
+    pub status : Status,
+    pub running: bool,
+    pub program : Vec<Instruction>,
+    pub machine : Option<u32>,
 }
 
 impl Process {
     pub fn new(name: String) -> Process {
         Process {
             name: name,
-            state: State::STARTED,
+            status: Status::Blocked,
+            running : false,
             program: Vec::new(),
             machine : None,
         }
@@ -43,8 +45,8 @@ impl Process {
         let mut finished_instruction = false;
         match self.program.get_mut(0) {
             Some(inst) => {
-                if (inst.itype == InstructionType::CPU && self.state == State::RUNNING) ||
-                   (inst.itype == InstructionType::IO  && self.state == State::WAITING) {
+                if (inst.itype == InstructionType::CPU && self.running) ||
+                   (inst.itype == InstructionType::IO  && self.status == Status::Blocked) {
                     inst.cycles -= 1;
                     finished_instruction = (inst.cycles <= 0);
                 }
@@ -58,7 +60,7 @@ impl Process {
     }
 
     pub fn to_string(&self) -> String {
-        format!("[{}: {:?}]", self.name, self.state)
+        format!("[{}: {:?}]", self.name, self.status)
     }
 
     pub fn to_json(&self) -> String {
