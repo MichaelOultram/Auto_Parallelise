@@ -1,4 +1,7 @@
 use serde_json;
+use rand;
+use rand::Rng;
+use rand::distributions::{IndependentSample, Range};
 
 #[derive(Debug, PartialEq, Serialize)]
 pub enum InstructionType {
@@ -39,6 +42,31 @@ impl Process {
             program: Vec::new(),
             machine : None,
         }
+    }
+
+    pub fn generate_amount(amount : u32, dict : Vec<String>) -> Vec<Process> {
+        let mut processes : Vec<Process> = Vec::new();
+
+        // Random number generator
+        let dict_range = Range::new(0, dict.len());
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..amount {
+            // Create a process using a random dictionary word
+            let i = dict_range.ind_sample(&mut rng);
+            let mut process = Process::new(dict[i].clone());
+
+            // TODO: Add intructions to the process
+
+
+            // Set the process as Runnable
+            process.status = Status::Runnable;
+
+            // Add the process to the list
+            processes.push(process);
+        }
+
+        processes
     }
 
     pub fn step(&mut self) {

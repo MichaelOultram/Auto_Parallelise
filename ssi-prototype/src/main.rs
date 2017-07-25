@@ -1,31 +1,48 @@
 #[macro_use]
 extern crate serde_derive;
-
 extern crate serde;
 extern crate serde_json;
+extern crate rand;
+
+use std::io;
+use std::io::BufReader;
+use std::io::BufRead;
+use std::fs::File;
+use std::path::Path;
 
 mod process;
 use process::Process as Process;
 use process::Status as Status;
 
+fn dictionary() -> Vec<String> {
+    let mut dict = Vec::new();
+
+    // Put each line of dictionary.txt into the vector
+    let f = File::open("dictionary.txt").unwrap();
+    let file = BufReader::new(&f);
+    for line in file.lines(){
+        let l = line.unwrap();
+        dict.push(l);
+    }
+
+    dict
+}
+
 fn main() {
-    let mut ready_queue = Vec::new();
-    let mut run_queue = Vec::new();
-    //let mut wait_queue = Vec::new();
+    // Load the dictionary from file
+    let dict = dictionary();
 
-    for x in 0..10 {
-        let p = Process::new(format!("{}-{}","Hello", x));
-        ready_queue.push(p);
-    }
+    // Process queue
+    let mut queue = Process::generate_amount(100, dict);
 
+    // Update some processes
     for x in 0..3 {
-        let mut p = ready_queue.pop().unwrap();
-        p.status = Status::Runnable;
-        run_queue.push(p);
+        queue[x].status = Status::Runnable;
     }
 
-    for p in run_queue {
-        println!("{}", p.to_json());
+    // Print the queue
+    for p in queue {
+        println!("{}", p.to_string());
     }
 
 }
