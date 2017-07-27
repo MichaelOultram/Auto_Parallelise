@@ -4,18 +4,29 @@ extern crate serde;
 extern crate serde_json;
 extern crate rand;
 
-use std::io;
+use std::thread;
+use std::sync::{Mutex, Arc};
+
 use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
-use std::path::Path;
 
 mod process;
 use process::Process as Process;
-use process::Status as Status;
+
+
+mod machine;
+use machine::Machine as Machine;
+
+type JoinHandle = thread::JoinHandle<()>;
+type AMutex<T> = Arc<Mutex<T>>;
+#[inline]
+pub fn new_amutex<T>(t : T) -> Arc<Mutex<T>> {
+    Arc::new(Mutex::new(t))
+}
 
 fn dictionary() -> Vec<String> {
-    let mut dict = Vec::new();
+    let mut dict = vec![];
 
     // Put each line of dictionary.txt into the vector
     let f = File::open("dictionary.txt").unwrap();
@@ -29,20 +40,38 @@ fn dictionary() -> Vec<String> {
 }
 
 fn main() {
-    // Load the dictionary from file
-    let dict = dictionary();
+    // Generate Processess
+    let all_processes : Vec<Process>;
+    {
+        // Load the dictionary from file
+        let dict = dictionary();
 
-    // Process queue
-    let mut queue = Process::generate_amount(100, dict);
-
-    // Update some processes
-    for x in 0..3 {
-        queue[x].status = Status::Runnable;
+        // Process queue
+        all_processes = Process::generate_processes(100, &dict);
     }
 
-    // Print the queue
-    for p in queue {
+    // Generate Machines
+    let mut all_machines = vec![];
+    for machine_id in 0..4 {
+        let machine = Arc::new(Machine::new(machine_id));
+        let machine2 = machine.clone();
+        thread::spawn(move || {
+            machine2.switch()
+        });
+        all_machines.push(machine);
+    }
+
+    for m in &all_machines {
+        println!("{}", m.to_string());
+    }
+
+    // Print all_processess
+    for p in &all_processes {
         println!("{}", p.to_string());
+    }
+
+    for m in &all_machines {
+        println!("{}", m.to_string());
     }
 
 }
