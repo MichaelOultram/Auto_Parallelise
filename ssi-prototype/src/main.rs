@@ -3,6 +3,7 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 extern crate rand;
+extern crate statrs;
 
 use std::thread;
 use std::sync::{Mutex, Arc};
@@ -18,12 +19,6 @@ use process::Process as Process;
 mod machine;
 use machine::Machine as Machine;
 
-type JoinHandle = thread::JoinHandle<()>;
-type AMutex<T> = Arc<Mutex<T>>;
-#[inline]
-pub fn new_amutex<T>(t : T) -> Arc<Mutex<T>> {
-    Arc::new(Mutex::new(t))
-}
 
 fn dictionary() -> Vec<String> {
     let mut dict = vec![];
@@ -40,38 +35,32 @@ fn dictionary() -> Vec<String> {
 }
 
 fn main() {
-    // Generate Processess
-    let all_processes : Vec<Process>;
-    {
+    // Random number generator
+    let mut rng = rand::StdRng::new().unwrap();
+
+    // Generate Process tree
+    let mut init_process : Process = {
         // Load the dictionary from file
         let dict = dictionary();
-
-        // Process queue
-        all_processes = Process::generate_processes(100, &dict);
-    }
+        Process::generate_process_tree(&mut rng, 1000, &dict)
+    };
+    init_process.status = process::Status::Runnable;
+    println!("{}", init_process.to_json());
 
     // Generate Machines
-    let mut all_machines = vec![];
+    let mut machine_handles = vec![];
     for machine_id in 0..4 {
-        let machine = Arc::new(Machine::new(machine_id));
-        let machine2 = machine.clone();
-        thread::spawn(move || {
-            machine2.switch()
-        });
-        all_machines.push(machine);
+        let machine = Machine::new(machine_id);
+        let join_handle = thread::spawn(move || machine.switch());
+        machine_handles.push(join_handle);
     }
 
-    for m in &all_machines {
-        println!("{}", m.to_string());
-    }
-
-    // Print all_processess
-    for p in &all_processes {
-        println!("{}", p.to_string());
-    }
-
-    for m in &all_machines {
-        println!("{}", m.to_string());
+    // Wait for all machines to have finished
+    for m in machine_handles {
+        match m.join() {
+            Ok(_) => {},
+            Err(e) => panic!(e),
+        }
     }
 
 }
