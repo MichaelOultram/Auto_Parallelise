@@ -6,7 +6,7 @@ extern crate rand;
 extern crate statrs;
 
 use std::thread;
-use std::sync::{Mutex, Arc};
+use std::sync::{Mutex, Arc, mpsc};
 
 use std::io::BufReader;
 use std::io::BufRead;
@@ -15,9 +15,11 @@ use std::fs::File;
 mod process;
 use process::Process as Process;
 
-
 mod machine;
 use machine::Machine as Machine;
+
+mod router;
+use router::Router as Router;
 
 
 fn dictionary() -> Vec<String> {
@@ -39,21 +41,34 @@ fn main() {
     let mut rng = rand::StdRng::new().unwrap();
 
     // Generate Process tree
+    println!("Generating Process Tree");
     let mut init_process : Process = {
         // Load the dictionary from file
         let dict = dictionary();
         Process::generate_process_tree(&mut rng, 1000, &dict)
     };
     init_process.status = process::Status::Runnable;
-    println!("{}", init_process.to_json());
+    println!("Done!");
+    //println!("{}", init_process.to_json());
+
+    // Create Router
+    println!("Creating Router");
+    let mut router = Router::new();
+    println!("Done!");
 
     // Generate Machines
+    println!("Generating Machines");
     let mut machine_handles = vec![];
     for machine_id in 0..4 {
-        let machine = Machine::new(machine_id);
+        let machine = Machine::new(machine_id, &mut router);
         let join_handle = thread::spawn(move || machine.switch());
         machine_handles.push(join_handle);
     }
+    println!("Done!");
+
+    println!("Start the Router");
+    router::start_router(router);
+    println!("Done!");
 
     // Wait for all machines to have finished
     for m in machine_handles {
