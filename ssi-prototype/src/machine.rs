@@ -32,9 +32,28 @@ impl Machine {
         }
     }
 
+    pub fn start(&self) {
+
+    }
+
     // Perform a context switch
     pub fn switch(&self) {
-
+        loop {
+            if self.id == 0 {
+                // Receive packets
+                match self.comms_receive.recv() {
+                    Ok(packet) => println!("Received from {}", packet.from_id),
+                    Err(e) => println!("{:?}", e),
+                }
+            } else {
+                // Sends a test packet
+                let packet = Packet {
+                    to_id: 0,
+                    from_id: self.id,
+                };
+                self.comms_send.send(packet);
+            }
+        }
     }
 
     // Executes one instruction for the program

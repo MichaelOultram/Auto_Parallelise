@@ -45,7 +45,7 @@ fn main() {
     let mut init_process : Process = {
         // Load the dictionary from file
         let dict = dictionary();
-        Process::generate_process_tree(&mut rng, 1000, &dict)
+        Process::generate_process_tree(&mut rng, 500, &dict)
     };
     init_process.status = process::Status::Runnable;
     println!("Done!");
@@ -69,6 +69,7 @@ fn main() {
     println!("Start the Router");
     router::start_router(router);
     println!("Done!");
+
 
     // Wait for all machines to have finished
     for m in machine_handles {
