@@ -5,22 +5,21 @@ extern crate serde_json;
 extern crate rand;
 extern crate statrs;
 
-use std::thread;
-use std::sync::{Mutex, Arc, mpsc};
+mod process;
+mod machine;
+mod router;
 
+use std::thread;
+use std::thread::JoinHandle;
 use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
 
-mod process;
 use process::Process as Process;
-
-mod machine;
 use machine::Machine as Machine;
 
-mod router;
-use router::Router as Router;
-
+static NUM_PROCESSES : u64 = 1000;
+static NUM_MACHINES : usize = 10;
 
 fn dictionary() -> Vec<String> {
     let mut dict = vec![];
@@ -45,7 +44,7 @@ fn main() {
     let mut init_process : Process = {
         // Load the dictionary from file
         let dict = dictionary();
-        Process::generate_process_tree(&mut rng, 500, &dict)
+        Process::generate_process_tree(&mut rng, NUM_PROCESSES, &dict)
     };
     init_process.status = process::Status::Runnable;
     println!("Done!");
@@ -53,16 +52,22 @@ fn main() {
 
     // Create Router
     println!("Creating Router");
-    let mut router = Router::new();
+    let mut router = (vec![], vec![]);
     println!("Done!");
 
     // Generate Machines
     println!("Generating Machines");
-    let mut machine_handles = vec![];
-    for machine_id in 0..4 {
-        let machine = Machine::new(machine_id, &mut router);
-        let join_handle = thread::spawn(move || machine.switch());
-        machine_handles.push(join_handle);
+    let machine_handles : Vec<JoinHandle<()>>;
+    {
+        // Create the machines
+        let mut machines : Vec<Machine> = (0..NUM_MACHINES).into_iter()
+            .map(|machine_id| Machine::new(machine_id, &mut router)).collect();
+
+        // Give the init process to the first machine
+        machines[0].global_queue.push_back(init_process);
+
+        // Start all machine threads
+        machine_handles = machines.into_iter().map(|mut m| thread::spawn(move || m.switch())).collect();
     }
     println!("Done!");
 
