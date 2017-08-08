@@ -12,6 +12,52 @@ const MAX_INSTRUCTIONS : usize = 1000;
 const MAX_CHILD_PROCESSESS : u64 = 25;
 const CHILD_BRANCH_RATE : f64 = 0.25;
 
+#[derive(Clone)]
+pub struct Generator {
+    pub num_processes : i32,
+    pub min_cycles : i32,
+    pub max_cycles : i32,
+    pub min_instructions : i32,
+    pub max_instructions : i32,
+    pub max_child_processes : i32,
+    pub child_branch_rate : f32,
+}
+
+impl Generator {
+    pub fn default() -> Self {
+        Generator {
+            num_processes: 500,
+            min_cycles : 100,
+            max_cycles : 1000,
+            min_instructions : 100,
+            max_instructions : 1000,
+            max_child_processes : 25,
+            child_branch_rate : 0.25,
+        }
+    }
+
+    pub fn generate_process_tree(&self, rng : &mut rand::StdRng, dict : &Vec<String>) -> Process {
+        let word = rand::sample(rng, dict, 1)[0];
+        let mut process = Process::new(word.clone());
+        let mut children : Vec<Process> = vec![];
+
+        let mut resources = self.num_processes;
+        while resources > 0 {
+            resources -= 1;
+            let n = Binomial::new(self.child_branch_rate as f64, self.max_child_processes as u64).unwrap();
+            let mut self_clone = self.clone();
+            self_clone.num_processes = cmp::min(n.sample::<StdRng>(rng) as u32, resources as u32) as i32;
+
+            children.push(self_clone.generate_process_tree(rng, dict));
+            resources -= self_clone.num_processes;
+        }
+
+        process.program = generate_program(rng, self.min_instructions as usize, self.max_instructions as usize, children);
+
+        process
+    }
+}
+
 #[derive(Clone, Serialize)]
 pub enum Instruction {
     CPU(u32),
