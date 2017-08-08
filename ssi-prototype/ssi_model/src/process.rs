@@ -5,12 +5,12 @@ use rand;
 use rand::StdRng;
 use statrs::distribution::{Binomial, Distribution};
 
-static MIN_CYCLES : u32 = 100;
-static MAX_CYCLES : u32 = 1000;
-static MIN_INSTRUCTIONS : usize = 25;
-static MAX_INSTRUCTIONS : usize = 100;
-static MAX_CHILD_PROCESSESS : u64 = 25;
-static CHILD_BRANCH_RATE : f64 = 0.75;
+const MIN_CYCLES : u32 = 100;
+const MAX_CYCLES : u32 = 1000;
+const MIN_INSTRUCTIONS : usize = 100;
+const MAX_INSTRUCTIONS : usize = 1000;
+const MAX_CHILD_PROCESSESS : u64 = 25;
+const CHILD_BRANCH_RATE : f64 = 0.25;
 
 #[derive(Clone, Serialize)]
 pub enum Instruction {
@@ -103,6 +103,22 @@ impl Process {
             Ok(s) => s,
             Err(e) => panic!(e),
         }
+    }
+
+    pub fn depth(&self) -> u32 {
+        let mut depth = 1;
+        for inst in &self.program {
+            match inst {
+                &Instruction::CPU(_) | &Instruction::IO(_) => {}
+                &Instruction::Spawn(ref process) => {
+                    let p_depth = process.depth();
+                    if 1 + p_depth > depth {
+                        depth = 1 + p_depth;
+                    }
+                }
+            }
+        }
+        depth
     }
 
 }

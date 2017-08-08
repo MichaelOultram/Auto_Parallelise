@@ -14,9 +14,9 @@ use router::Packet as Packet;
 
 
 use NUM_MACHINES;
-static TARGET_LOCAL_QUEUE_LENGTH: u32 = 10;
-static NUM_CYCLES_PER_CONTEXT: u32 = 100;
-static MAX_HOPS: u32 = 10;
+const TARGET_LOCAL_QUEUE_LENGTH: u32 = 3;
+const NUM_CYCLES_PER_CONTEXT: u32 = 100;
+const MAX_HOPS: u32 = 10;
 
 pub enum PacketData {
     REQUEST(usize, u32), // consumer, hops
@@ -71,6 +71,7 @@ impl Machine {
                             if hops >= MAX_HOPS {
                                 // Block the request_machine_id
                                 self.blocked_machines_queue.push_back(request_machine_id);
+                                self.print(format!("Blocked {}", request_machine_id));
                             } else {
                                 // Forward the request to another machine
                                 self.send(self.random_machine(), PacketData::REQUEST(request_machine_id, hops + 1));

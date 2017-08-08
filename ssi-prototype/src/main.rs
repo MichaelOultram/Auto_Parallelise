@@ -1,87 +1,71 @@
+extern crate glium;
 #[macro_use]
-extern crate serde_derive;
-extern crate serde;
-extern crate serde_json;
-extern crate rand;
-extern crate statrs;
+extern crate imgui;
+extern crate imgui_glium_renderer;
+extern crate ssi_model;
 
-mod process;
-mod machine;
-mod router;
+use imgui::*;
+mod support;
+use ssi_model::process::Process as Process;
+use ssi_model::process::Instruction as Instruction;
 
-use std::thread;
-use std::thread::JoinHandle;
-use std::io::BufReader;
-use std::io::BufRead;
-use std::fs::File;
-
-use process::Process as Process;
-use machine::Machine as Machine;
-
-static NUM_PROCESSES : u64 = 1000;
-static NUM_MACHINES : usize = 10;
-
-fn dictionary() -> Vec<String> {
-    let mut dict = vec![];
-
-    // Put each line of dictionary.txt into the vector
-    let f = File::open("dictionary.txt").unwrap();
-    let file = BufReader::new(&f);
-    for line in file.lines(){
-        let l = line.unwrap();
-        dict.push(l);
-    }
-
-    dict
-}
+const CLEAR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 fn main() {
-    // Random number generator
-    let mut rng = rand::StdRng::new().unwrap();
+    let mut num_machines = 10;
 
-    // Generate Process tree
-    println!("Generating Process Tree");
-    let mut init_process : Process = {
-        // Load the dictionary from file
-        let dict = dictionary();
-        Process::generate_process_tree(&mut rng, NUM_PROCESSES, &dict)
-    };
-    init_process.status = process::Status::Runnable;
-    println!("Done!");
-    //println!("{}", init_process.to_json());
+    let mut num_processes = 500;
+    let mut is_generating = false;
+    let mut init_process : Option<Process> = None;
 
-    // Create Router
-    println!("Creating Router");
-    let mut router = (vec![], vec![]);
-    println!("Done!");
+    support::run("ssi-prototype".to_string(), CLEAR_COLOR, |ui| {
+        ui.window(im_str!("Simulation"))
+            .size((300.0, 100.0), ImGuiSetCond_FirstUseEver)
+            .build(|| {
+                ui.slider_int(im_str!("Number of machines"), &mut num_machines, 1, 50).build();
+                ui.separator();
+                //ui.button(im_str!("Simulate"), (100, 50));
+            });
 
-    // Generate Machines
-    println!("Generating Machines");
-    let machine_handles : Vec<JoinHandle<()>>;
-    {
-        // Create the machines
-        let mut machines : Vec<Machine> = (0..NUM_MACHINES).into_iter()
-            .map(|machine_id| Machine::new(machine_id, &mut router)).collect();
+        ui.window(im_str!("Process Configuration"))
+            .size((300.0, 100.0), ImGuiSetCond_FirstUseEver)
+            .build(|| {
+                if is_generating {
+                    ui.text(im_str!("Generating Process Tree\nPlease Wait"));
+                } else {
+                    if ui.collapsing_header(im_str!("Generator")).build() {
+                        ui.slider_int(im_str!("Number of processes"), &mut num_processes, 1, 2000).build();
+                    }
 
-        // Give the init process to the first machine
-        machines[0].global_queue.push_back(init_process);
+                    // Print tree
+                    if ui.collapsing_header(im_str!("Process Tree")).build() {
+                        match init_process {
+                            Some(ref process) => render_process_tree(ui, process),
+                            None => ui.text(im_str!("Not yet generated")),
+                        }
+                    }
 
-        // Start all machine threads
-        machine_handles = machines.into_iter().map(|mut m| thread::spawn(move || m.switch())).collect();
-    }
-    println!("Done!");
+                    if ui.small_button(im_str!("Generate")) {
+                        is_generating = true;
+                    }
 
-    println!("Start the Router");
-    router::start_router(router);
-    println!("Done!");
+                    // Toggle for CPU/IO counts
+                    // Save/Load
+                }
+            });
+        true
+    });
+}
 
-
-    // Wait for all machines to have finished
-    for m in machine_handles {
-        match m.join() {
-            Ok(_) => {},
-            Err(e) => panic!(e),
-        }
-    }
-
+fn render_process_tree(ui : &Ui, process: &Process) {
+    ui.tree_node(&ImString::new(process.to_string()))
+        .opened(true, ImGuiSetCond_Always)
+        .build(|| {
+            for instruction in &process.program {
+                match instruction {
+                    &Instruction::Spawn(ref p) => render_process_tree(ui, p),
+                    _ => {},
+                }
+            }
+        });
 }
