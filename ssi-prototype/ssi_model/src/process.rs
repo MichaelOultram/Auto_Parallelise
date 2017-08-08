@@ -20,19 +20,21 @@ pub struct Generator {
     pub min_instructions : i32,
     pub max_instructions : i32,
     pub max_child_processes : i32,
-    pub child_branch_rate : f32,
+    pub child_branch_rate_initial : f32,
+    pub child_branch_rate_ramp : f32,
 }
 
 impl Generator {
     pub fn default() -> Self {
         Generator {
-            num_processes: 500,
+            num_processes: 300,
             min_cycles : 100,
             max_cycles : 1000,
             min_instructions : 100,
             max_instructions : 1000,
-            max_child_processes : 25,
-            child_branch_rate : 0.25,
+            max_child_processes : 85,
+            child_branch_rate_initial : 0.7,
+            child_branch_rate_ramp : -0.175,
         }
     }
 
@@ -44,9 +46,18 @@ impl Generator {
         let mut resources = self.num_processes;
         while resources > 0 {
             resources -= 1;
-            let n = Binomial::new(self.child_branch_rate as f64, self.max_child_processes as u64).unwrap();
+            let n = Binomial::new(self.child_branch_rate_initial as f64, self.max_child_processes as u64).unwrap();
+
+            // Create a clone to generate the child tree
             let mut self_clone = self.clone();
             self_clone.num_processes = cmp::min(n.sample::<StdRng>(rng) as u32, resources as u32) as i32;
+            // Alter the branch rate (but keep it in bounds)
+            self_clone.child_branch_rate_initial += self_clone.child_branch_rate_ramp;
+            if self_clone.child_branch_rate_initial < 0.001 {
+                self_clone.child_branch_rate_initial = 0.001;
+            } else if self_clone.child_branch_rate_initial > 1.0 {
+                self_clone.child_branch_rate_initial = 1.0;
+            }
 
             children.push(self_clone.generate_process_tree(rng, dict));
             resources -= self_clone.num_processes;
