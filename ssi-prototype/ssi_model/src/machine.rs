@@ -8,19 +8,33 @@ use process;
 use process::Process as Process;
 use process::Instruction as Instruction;
 
-use router;
 use router::Router as Router;
 use router::Packet as Packet;
-
-
-use NUM_MACHINES;
-const TARGET_LOCAL_QUEUE_LENGTH: u32 = 3;
-const NUM_CYCLES_PER_CONTEXT: u32 = 100;
-const MAX_HOPS: u32 = 10;
 
 pub enum PacketData {
     REQUEST(usize, u32), // consumer, hops
     REPLY(Process),
+    PROCCESS_DONE, // Used for router as termination check
+    TERMINATE, // Machine should terminate
+}
+
+#[derive(Clone)]
+pub struct MachineConfig {
+    pub num_machines: i32,
+    pub local_queue_length: i32,
+    pub num_cycles_per_context: i32,
+    pub max_hops: i32,
+}
+
+impl MachineConfig {
+    pub fn new() -> Self {
+        MachineConfig {
+            num_machines: 10,
+            local_queue_length: 3,
+            num_cycles_per_context: 100,
+            max_hops: 10,
+        }
+    }
 }
 
 pub struct Machine {
@@ -31,13 +45,14 @@ pub struct Machine {
     pub comms_send : mpsc::Sender<Packet>,
     pub comms_receive : mpsc::Receiver<Packet>,
     pub num_requests_sent: u32,
+    pub running: bool,
+    pub config: MachineConfig,
 }
 
 
 impl Machine {
-
-    pub fn new(machine_id : usize, router : &mut Router) -> Self {
-        let (comms_send, comms_receive) = router::add_machine(router, machine_id);
+    pub fn new(config: MachineConfig, machine_id : usize, router : &mut Router) -> Self {
+        let (comms_send, comms_receive) = router.add_machine(machine_id);
         Machine {
             id: machine_id,
             global_queue: VecDeque::new(),
@@ -46,6 +61,8 @@ impl Machine {
             comms_send: comms_send,
             comms_receive: comms_receive,
             num_requests_sent: 0,
+            running: false,
+            config: config,
         }
     }
 
@@ -53,7 +70,7 @@ impl Machine {
     fn random_machine(&self) -> usize {
         let mut rng = rand::thread_rng();
         loop {
-            let i = rng.gen_range(0, NUM_MACHINES);
+            let i = rng.gen_range(0, self.config.num_machines as usize);
             if i != self.id {
                 return i
             }
@@ -68,13 +85,14 @@ impl Machine {
                 Ok(packet) => match packet.data {
                     PacketData::REQUEST(request_machine_id, hops) => {
                         if self.global_queue.is_empty() {
-                            if hops >= MAX_HOPS {
+                            if hops >= self.config.max_hops as u32 {
                                 // Block the request_machine_id
                                 self.blocked_machines_queue.push_back(request_machine_id);
                                 self.print(format!("Blocked {}", request_machine_id));
                             } else {
                                 // Forward the request to another machine
-                                self.send(self.random_machine(), PacketData::REQUEST(request_machine_id, hops + 1));
+                                let random_machine = self.random_machine();
+                                self.send(random_machine, PacketData::REQUEST(request_machine_id, hops + 1));
                             }
                         } else {
                             // Honor the request
@@ -87,20 +105,22 @@ impl Machine {
                         self.local_queue.push_back(process);
                         self.num_requests_sent -= 1;
                     },
+                    PacketData::TERMINATE => self.running = false,
+                    PacketData::PROCCESS_DONE => unreachable!(), // Machine should not receive this packet
                 },
                 Err(_) => return,
             }
         }
     }
 
-    fn send(&self, to_id: usize, data: PacketData) {
+    fn send(&mut self, to_id: usize, data: PacketData) {
         let packet = Packet {
             to_id: to_id,
             from_id: self.id,
             data: data,
         };
         match self.comms_send.send(packet) {
-            Err(e) => panic!(e),
+            Err(e) => self.running = false,// Router must have terminated
             Ok(_) => {},
         }
     }
@@ -115,7 +135,7 @@ impl Machine {
         }
 
         // Make our local_queue length + num_requests_sent >= TARGET_LOCAL_QUEUE_LENGTH
-        while (self.local_queue.len() as u32) + self.num_requests_sent < TARGET_LOCAL_QUEUE_LENGTH {
+        while (self.local_queue.len() as u32) + self.num_requests_sent < self.config.local_queue_length as u32 {
             // Check to see if there is any processes waiting in the global queue
             if !self.global_queue.is_empty() {
                 // Move a process from the global queue into the local queue
@@ -126,7 +146,8 @@ impl Machine {
             } else {
                 // Request another process from a random machine
                 let random_machine = self.random_machine();
-                self.send(random_machine, PacketData::REQUEST(self.id, 1));
+                let packet_data = PacketData::REQUEST(self.id, 1); // 1 is initial number of hops
+                self.send(random_machine, packet_data);
                 self.print(format!("Requesting a process from machine-{}", random_machine));
                 self.num_requests_sent += 1;
             }
@@ -137,7 +158,8 @@ impl Machine {
     // Perform a context switch
     pub fn switch(&mut self) {
         self.print("Started".to_string());
-        loop {
+        self.running = true;
+        while self.running {
             self.fetch_new_processes();
             self.receive();
 
@@ -161,6 +183,7 @@ impl Machine {
             }
 
         }
+        self.print(format!("Terminated"));
     }
 
     fn print(&self, message : String) {
@@ -169,7 +192,7 @@ impl Machine {
 
     fn execute(&mut self, process : &mut Process) {
         let mut cycles = 0;
-        while cycles < NUM_CYCLES_PER_CONTEXT && process.status == process::Status::Runnable {
+        while cycles < self.config.num_cycles_per_context && process.status == process::Status::Runnable {
             self.step_program(process);
             cycles += 1;
         }
@@ -205,6 +228,7 @@ impl Machine {
 
         if process.program.is_empty() {
             process.status = process::Status::Exited;
+            self.send(0, PacketData::PROCCESS_DONE);
         }
     }
 

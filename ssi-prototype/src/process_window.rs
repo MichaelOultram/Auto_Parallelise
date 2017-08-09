@@ -10,7 +10,8 @@ use process::*;
 use worker::Worker as Worker;
 
 pub struct ProcessWindow {
-    pub worker : Worker<Process>,
+    pub generator_worker : Worker<Process>,
+    pub export_worker : Worker<()>,
     pub settings : Generator,
     pub show_cpu_io : bool,
 }
@@ -18,7 +19,8 @@ pub struct ProcessWindow {
 impl ProcessWindow {
     pub fn new() -> Self {
         ProcessWindow {
-            worker: Worker::dummy(),
+            generator_worker: Worker::dummy(),
+            export_worker: Worker::dummy(),
             settings: Generator::default(),
             show_cpu_io: false,
         }
@@ -28,19 +30,22 @@ impl ProcessWindow {
         ui.window(im_str!("Process Generator"))
             .size((300.0, 100.0), ImGuiSetCond_FirstUseEver)
             .build(|| {
-                if self.worker.working {
+                if self.generator_worker.working {
                     ui.text(im_str!("Generating Process Tree\nPlease Wait"));
-                    model.init_process = self.worker.result();
+                    model.init_process = self.generator_worker.result();
 
                     match model.init_process {
                         Some(ref mut p) => p.status = Status::Runnable,
                         None => {},
                     }
+                } else if self.export_worker.working {
+                    ui.text(im_str!("Exporting Process Tree\nPlease Wait"));
+                    self.export_worker.result();
                 } else {
                     ui.same_line(5.0);
                     if ui.button(im_str!("Generate"), ImVec2::new(100.0, 25.0)) {
                         let generator = self.settings.clone();
-                        self.worker = Worker::start(move || {
+                        self.generator_worker = Worker::start(move || {
                             let dict = ProcessWindow::dictionary();
                             let mut rng = rand::StdRng::new().unwrap();
                             generator.generate_process_tree(&mut rng, &dict)
@@ -55,8 +60,14 @@ impl ProcessWindow {
 
                     ui.same_line(215.0);
                     if ui.button(im_str!("Export"), ImVec2::new(100.0, 25.0)) {
-                        // TODO: Export process tree
-                        unimplemented!();
+                        // TODO: Export without cloning
+                        let init_process = model.init_process.clone();
+                        self.export_worker = Worker::start(move || {
+                            match init_process {
+                                Some(ref p) => println!("{}", p.to_json()),
+                                None => println!("No process tree"),
+                            }
+                        });
                     }
 
                     ui.separator();
