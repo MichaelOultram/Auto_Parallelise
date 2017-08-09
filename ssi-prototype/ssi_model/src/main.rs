@@ -48,13 +48,14 @@ fn main() {
     };
     init_process.status = process::Status::Runnable;
     println!("Done!");
-    // println!("Depth: {}", init_process.depth());
-    // return;
+    //println!("Depth: {}", init_process.depth());
+    //println!("Num Processes: {}", init_process.num_processes());
+    //return;
 
 
     // Create Router
     println!("Creating Router");
-    let mut router = Router::new(301);
+    let mut router = Router::new(300);
     println!("Done!");
 
     // Generate Machines
@@ -77,9 +78,12 @@ fn main() {
     println!("Done!");
 
     println!("Start the Router");
-    router.start_router();
+    let terminate_simulation = router.start_router();
     println!("Done!");
 
+    // Early termination
+    // thread::sleep_ms(1000);
+    // terminate_simulation();
 
     // Wait for all machines to have finished
     for m in machine_handles {

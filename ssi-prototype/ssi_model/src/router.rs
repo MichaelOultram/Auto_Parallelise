@@ -1,6 +1,6 @@
 use std::thread;
 use std::sync::mpsc;
-use self::mpsc::{Sender, Receiver};
+use self::mpsc::{Sender, Receiver, SendError};
 use rand;
 use rand::Rng;
 use machine::PacketData as PacketData;
@@ -13,7 +13,6 @@ pub struct Router {
 
 pub struct Packet {
     pub to_id : usize,
-    pub from_id : usize,
     pub data : PacketData,
 }
 
@@ -37,7 +36,9 @@ impl Router {
         (machine_send, machine_receive)
     }
 
-    pub fn start_router(mut self){
+    pub fn start_router(mut self) -> Box<Fn() -> ()> {
+        let (external_send, router_receive) = mpsc::channel();
+        self.receivers.push(router_receive);
         thread::spawn(move || {
             let mut rng = rand::thread_rng();
             let mut processes_complete = 0;
@@ -48,31 +49,28 @@ impl Router {
                         Ok(packet) => {
                             match packet.data {
                                 // Increase the number of processes complete
-                                PacketData::PROCCESS_DONE => {
+                                PacketData::ProcessDone => {
                                     processes_complete += 1;
                                     println!("[router] {} processes completed", processes_complete);
                                     // Check to see if simulation is over
                                     if processes_complete >= self.num_processes {
-                                        println!("[router] killing all machines");
-                                        // Kill all machines
-                                        for sender in &self.senders {
-                                            sender.send(Packet{
-                                                to_id: 0,
-                                                from_id: 0,
-                                                data: PacketData::TERMINATE,
-                                            });
-                                        }
+                                        self.terminate();
                                         break 'main;
                                     }
                                 }
 
+                                // External terminate packet
+                                PacketData::Terminate => {
+                                    self.terminate();
+                                    break 'main;
+                                }
+
                                 // Forwad packet to machine
                                 _ => {
-                                    let (from, to) = (packet.from_id, packet.to_id);
                                     // Find the sender channel and forward the packet
                                     let ref send_to = *self.senders.get(packet.to_id).unwrap();
                                     match send_to.send(packet) {
-                                        Ok(_) => println!("[router] {} -> {}", from, to),
+                                        Ok(_) => {},
                                         Err(e) => panic!(e),
                                     };
                                 }
@@ -83,5 +81,23 @@ impl Router {
                 }
             }
         });
+
+        Box::new(move || {
+            external_send.send(Packet {
+                to_id: 0,
+                data: PacketData::Terminate,
+            });
+        })
+    }
+
+    fn terminate(&self) {
+        println!("[router] killing all machines");
+        // Kill all machines
+        for sender in &self.senders {
+            sender.send(Packet{
+                to_id: 0,
+                data: PacketData::Terminate,
+            });
+        }
     }
 }
