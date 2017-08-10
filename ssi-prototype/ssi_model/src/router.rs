@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use self::mpsc::{Sender, Receiver};
 use rand;
 use rand::Rng;
-use machine::PacketData as PacketData;
+use machine::NetData as NetData;
 
 pub struct Router {
     senders: Vec<Sender<Packet>>,
@@ -13,9 +13,19 @@ pub struct Router {
 }
 
 pub struct Packet {
-    pub to_id : usize,
     pub vector_clock : Vec<u32>,
     pub data : PacketData,
+}
+
+pub enum PacketData {
+    NetData(usize, NetData), // to_id, NetData
+    SimData(usize, SimData), // from_id, NetData
+}
+
+pub enum SimData {
+    ProcessStart(String),
+    ProcessEnd(String),
+    ProcessSpawn(String),
 }
 
 impl Router {
@@ -57,32 +67,43 @@ impl Router {
                             combine_vector_clocks(&mut self.vector_clock, &packet.vector_clock);
                             //println!("[router] {:?}", self.vector_clock);
                             match packet.data {
-                                // Increase the number of processes complete
-                                PacketData::ProcessDone => {
-                                    processes_complete += 1;
-                                    println!("[router] {} processes completed", processes_complete);
-                                    // Check to see if simulation is over
-                                    if processes_complete >= self.num_processes {
+                                PacketData::NetData(to_id, data) => match data {
+                                    // External terminate packet
+                                    NetData::Terminate => {
                                         self.terminate();
                                         break 'main;
                                     }
-                                }
 
-                                // External terminate packet
-                                PacketData::Terminate => {
-                                    self.terminate();
-                                    break 'main;
-                                }
+                                    // Forward packet to machine
+                                    _ => {
+                                        // Find the sender channel and forward the packet
+                                        let ref send_to = *self.senders.get(to_id).unwrap();
+                                        let forward_packet = Packet{
+                                            vector_clock: packet.vector_clock.clone(),
+                                            data: PacketData::NetData(to_id, data),
+                                        };
+                                        match send_to.send(forward_packet) {
+                                            Ok(_) => {},
+                                            Err(e) => panic!(e),
+                                        };
+                                    }
+                                },
 
-                                // Forwad packet to machine
-                                _ => {
-                                    // Find the sender channel and forward the packet
-                                    let ref send_to = *self.senders.get(packet.to_id).unwrap();
-                                    match send_to.send(packet) {
-                                        Ok(_) => {},
-                                        Err(e) => panic!(e),
-                                    };
-                                }
+                                PacketData::SimData(from_id, data) => match data {
+                                    SimData::ProcessStart(process_name) => println!("[machine-{}] {} Started", from_id, process_name),
+
+                                    SimData::ProcessEnd(process_name) => {
+                                        processes_complete += 1;
+                                        println!("[machine-{}] {} Ended", from_id, process_name);
+                                        // Check to see if simulation is over
+                                        if processes_complete >= self.num_processes {
+                                            self.terminate();
+                                            break 'main;
+                                        }
+                                    }
+
+                                    SimData::ProcessSpawn(process_name) => println!("[machine-{}] {} Spawned", from_id, process_name),
+                                },
                             }
                         },
                         Err(_) => {},// Ignore if no packet received
@@ -93,9 +114,8 @@ impl Router {
 
         Box::new(move || {
             external_send.send(Packet {
-                to_id: 0,
                 vector_clock: vec![0;num_machines as usize], // Unable to use actual vector clock
-                data: PacketData::Terminate,
+                data: PacketData::NetData(0, NetData::Terminate),
             });
         })
     }
@@ -103,11 +123,10 @@ impl Router {
     fn terminate(&self) {
         println!("[router] killing all machines");
         // Kill all machines
-        for sender in &self.senders {
-            sender.send(Packet{
-                to_id: 0,
+        for i in 0..self.senders.len() {
+            self.senders[i].send(Packet{
                 vector_clock: self.vector_clock.clone(),
-                data: PacketData::Terminate,
+                data: PacketData::NetData(i, NetData::Terminate),
             });
         }
     }

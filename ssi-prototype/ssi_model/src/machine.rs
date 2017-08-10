@@ -10,13 +10,6 @@ use process::Instruction as Instruction;
 
 use router::*;
 
-pub enum PacketData {
-    Request(usize, u32), // consumer, hops
-    Reply(Process),
-    ProcessDone, // Used for router as termination check
-    Terminate, // Machine should terminate
-}
-
 #[derive(Clone)]
 pub struct MachineConfig {
     pub num_machines: i32,
@@ -34,6 +27,12 @@ impl MachineConfig {
             max_hops: 10,
         }
     }
+}
+
+pub enum NetData {
+    Request(usize, u32), // consumer, hops
+    Reply(Process),
+    Terminate, // Machine should terminate
 }
 
 pub struct Machine {
@@ -87,32 +86,34 @@ impl Machine {
             match self.comms_receive.try_recv() {
                 Ok(packet) => {
                     combine_vector_clocks(&mut self.vector_clock, &packet.vector_clock);
-                    //self.print(format!("VC-{:?}", self.vector_clock));
+                    //rself.print(format!("VC-{:?}", self.vector_clock));
                     match packet.data {
-                        PacketData::Request(request_machine_id, hops) => {
-                            if self.global_queue.is_empty() {
-                                if hops >= self.config.max_hops as u32 {
-                                    // Block the request_machine_id
-                                    self.blocked_machines_queue.push_back(request_machine_id);
-                                    self.print(format!("Blocked {}", request_machine_id));
+                        PacketData::NetData(to_id, data) => match data {
+                            NetData::Request(request_machine_id, hops) => {
+                                if self.global_queue.is_empty() {
+                                    if hops >= self.config.max_hops as u32 {
+                                        // Block the request_machine_id
+                                        self.blocked_machines_queue.push_back(request_machine_id);
+                                        self.print(format!("Blocked {}", request_machine_id));
+                                    } else {
+                                        // Forward the request to another machine
+                                        let random_machine = self.random_machine();
+                                        self.send_netdata(random_machine, NetData::Request(request_machine_id, hops + 1));
+                                    }
                                 } else {
-                                    // Forward the request to another machine
-                                    let random_machine = self.random_machine();
-                                    self.send(random_machine, PacketData::Request(request_machine_id, hops + 1));
+                                    // Honor the request
+                                    let process = self.global_queue.pop_front().unwrap();
+                                    self.send_netdata(request_machine_id, NetData::Reply(process));
                                 }
-                            } else {
-                                // Honor the request
-                                let process = self.global_queue.pop_front().unwrap();
-                                self.send(request_machine_id, PacketData::Reply(process));
-                            }
+                            },
+                            NetData::Reply(mut process) => {
+                                process.status = process::Status::Runnable;
+                                self.local_queue.push_back(process);
+                                self.num_requests_sent -= 1;
+                            },
+                            NetData::Terminate => self.running = false,
                         },
-                        PacketData::Reply(mut process) => {
-                            process.status = process::Status::Runnable;
-                            self.local_queue.push_back(process);
-                            self.num_requests_sent -= 1;
-                        },
-                        PacketData::Terminate => self.running = false,
-                        PacketData::ProcessDone => unreachable!(), // Machine should not receive this packet
+                        PacketData::SimData(_,_) => unreachable!(), // Router should absorb all NetData packets
                     }
                 },
                 Err(_) => return,
@@ -120,10 +121,9 @@ impl Machine {
         }
     }
 
-    fn send(&mut self, to_id: usize, data: PacketData) {
+    fn send(&mut self, data: PacketData) {
         self.vector_clock[self.id] += 1;
         let packet = Packet {
-            to_id: to_id,
             vector_clock: self.vector_clock.clone(),
             data: data,
         };
@@ -133,13 +133,22 @@ impl Machine {
         }
     }
 
+    fn send_netdata(&mut self, to_id: usize, data: NetData) {
+        self.send(PacketData::NetData(to_id, data));
+    }
+
+    fn send_simdata(&mut self, data: SimData) {
+        let from_id = self.id;
+        self.send(PacketData::SimData(from_id, data));
+    }
+
     fn fetch_new_processes(&mut self){
-        // Give all blocked mself_clone.num_processesachines a process (if there is one)
+        // Give all blocked machines a process (if there is one)
         while !self.global_queue.is_empty() && !self.blocked_machines_queue.is_empty() {
             let request_machine_id = self.blocked_machines_queue.pop_front().unwrap();
             let process = self.global_queue.pop_front().unwrap();
             self.print(format!("Gave {} to machine-{}", process.to_string(), request_machine_id));
-            self.send(request_machine_id, PacketData::Reply(process));
+            self.send_netdata(request_machine_id, NetData::Reply(process));
         }
 
         // Make our local_queue length + num_requests_sent >= TARGET_LOCAL_QUEUE_LENGTH
@@ -150,12 +159,13 @@ impl Machine {
                 let mut process = self.global_queue.pop_front().unwrap();
                 process.status = process::Status::Runnable;
                 self.print(format!("Added {} from global_queue to local_queue", process.to_string()));
+                self.send_simdata(SimData::ProcessStart(process.name.clone()));
                 self.local_queue.push_back(process);
             } else {
                 // Request another process from a random machine
                 let random_machine = self.random_machine();
-                let packet_data = PacketData::Request(self.id, 1); // 1 is initial number of hops
-                self.send(random_machine, packet_data);
+                let packet_data = NetData::Request(self.id, 1); // 1 is initial number of hops
+                self.send_netdata(random_machine, packet_data);
                 self.print(format!("Requesting a process from machine-{}", random_machine));
                 self.num_requests_sent += 1;
             }
@@ -195,7 +205,7 @@ impl Machine {
     }
 
     fn print(&self, message : String) {
-        println!("[{}] {}", self.to_string(), message);
+        //println!("[{}] {}", self.to_string(), message);
     }
 
     fn execute(&mut self, process : &mut Process) {
@@ -228,6 +238,7 @@ impl Machine {
                     }
                 }
                 Instruction::Spawn(new_process) => {
+                    self.send_simdata(SimData::ProcessSpawn(new_process.name.clone()));
                     self.global_queue.push_back(new_process);
                 }
             },
@@ -236,7 +247,8 @@ impl Machine {
 
         if process.program.is_empty() {
             process.status = process::Status::Exited;
-            self.send(0, PacketData::ProcessDone);
+            let from_id = self.id;
+            self.send_simdata(SimData::ProcessEnd(process.name.clone()));
         }
     }
 
