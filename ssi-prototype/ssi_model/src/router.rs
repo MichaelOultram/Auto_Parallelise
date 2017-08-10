@@ -9,10 +9,12 @@ pub struct Router {
     senders: Vec<Sender<Packet>>,
     receivers: Vec<Receiver<Packet>>,
     num_processes: u32,
+    vector_clock: Vec<u32>,
 }
 
 pub struct Packet {
     pub to_id : usize,
+    pub vector_clock : Vec<u32>,
     pub data : PacketData,
 }
 
@@ -21,6 +23,7 @@ impl Router {
         Router {
             senders: vec![],
             receivers: vec![],
+            vector_clock: vec![],
             num_processes: num_processes,
         }
     }
@@ -29,6 +32,9 @@ impl Router {
         // Create channels
         let (router_send, machine_receive) = mpsc::channel();
         let (machine_send, router_recieve) = mpsc::channel();
+
+        // Add a space in the vector clock
+        self.vector_clock.push(0);
 
         // Allow a 2 way connection between router and machine
         self.senders.insert(id, router_send);
@@ -39,6 +45,7 @@ impl Router {
     pub fn start_router(mut self) -> Box<Fn() -> ()> {
         let (external_send, router_receive) = mpsc::channel();
         self.receivers.push(router_receive);
+        let num_machines = self.senders.len();
         thread::spawn(move || {
             let mut rng = rand::thread_rng();
             let mut processes_complete = 0;
@@ -47,6 +54,8 @@ impl Router {
                 for receiver in self.receivers.iter() {
                     match receiver.try_recv() {
                         Ok(packet) => {
+                            combine_vector_clocks(&mut self.vector_clock, &packet.vector_clock);
+                            //println!("[router] {:?}", self.vector_clock);
                             match packet.data {
                                 // Increase the number of processes complete
                                 PacketData::ProcessDone => {
@@ -85,6 +94,7 @@ impl Router {
         Box::new(move || {
             external_send.send(Packet {
                 to_id: 0,
+                vector_clock: vec![0;num_machines as usize], // Unable to use actual vector clock
                 data: PacketData::Terminate,
             });
         })
@@ -96,8 +106,20 @@ impl Router {
         for sender in &self.senders {
             sender.send(Packet{
                 to_id: 0,
+                vector_clock: self.vector_clock.clone(),
                 data: PacketData::Terminate,
             });
+        }
+    }
+}
+
+pub fn combine_vector_clocks(original: &mut Vec<u32>, new: &Vec<u32>) {
+    let length = original.len();
+    assert_eq!(length, new.len());
+
+    for i in 0..length {
+        if new[i] > original[i] {
+            original[i] = new[i];
         }
     }
 }

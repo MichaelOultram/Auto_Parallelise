@@ -55,13 +55,18 @@ impl SimulationWindow {
                 } else if self.simulation_worker.working {
                     ui.text(im_str!("Simulating\nPlease Wait"));
                     self.simulation_worker.result();
+                    let mut reset_pressed = false;
                     match self.terminate_simulation {
                         Some(ref terminate_simulation) => {
                             if ui.button(im_str!("Stop Simulation"), ImVec2::new(150.0, 25.0)) {
                                 terminate_simulation();
+                                reset_pressed = true;
                             }
                         },
                         None => {},
+                    }
+                    if reset_pressed {
+                        self.terminate_simulation = None;
                     }
                 } else {
                     // Process Generator
@@ -193,7 +198,6 @@ impl SimulationWindow {
 impl SimulationWindow {
     fn simulation(&mut self, model : &mut ModelState, ui: &Ui) {
         if ui.button(im_str!("Simulate"), ImVec2::new(100.0, 25.0)) {
-            // TODO: Run simulation, check init_process
             match model.init_process {
                 Some(ref p) => {
                     let init_process = p.clone(); //TODO remove this clone
@@ -227,7 +231,7 @@ impl SimulationWindow {
                         }
                     });
                 },
-                None => {println!("No init process")},
+                None => println!("No init process"),
             }
         }
 

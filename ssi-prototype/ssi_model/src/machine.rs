@@ -8,8 +8,7 @@ use process;
 use process::Process as Process;
 use process::Instruction as Instruction;
 
-use router::Router as Router;
-use router::Packet as Packet;
+use router::*;
 
 pub enum PacketData {
     Request(usize, u32), // consumer, hops
@@ -42,8 +41,11 @@ pub struct Machine {
     pub global_queue: VecDeque<Process>, // Processes that may be moved to another machine
     pub blocked_machines_queue : VecDeque<usize>, // Machine id's that are waiting on this machine for a process
     pub local_queue : VecDeque<Process>, // Processes that are running on this machine
+
     pub comms_send : mpsc::Sender<Packet>,
     pub comms_receive : mpsc::Receiver<Packet>,
+    pub vector_clock : Vec<u32>,
+
     pub num_requests_sent: u32,
     pub running: bool,
     pub config: MachineConfig,
@@ -60,6 +62,7 @@ impl Machine {
             local_queue: VecDeque::new(),
             comms_send: comms_send,
             comms_receive: comms_receive,
+            vector_clock: vec![0;config.num_machines as usize],
             num_requests_sent: 0,
             running: false,
             config: config,
@@ -82,31 +85,35 @@ impl Machine {
         // Keep receiving until there are no more packets waiting
         loop {
             match self.comms_receive.try_recv() {
-                Ok(packet) => match packet.data {
-                    PacketData::Request(request_machine_id, hops) => {
-                        if self.global_queue.is_empty() {
-                            if hops >= self.config.max_hops as u32 {
-                                // Block the request_machine_id
-                                self.blocked_machines_queue.push_back(request_machine_id);
-                                self.print(format!("Blocked {}", request_machine_id));
+                Ok(packet) => {
+                    combine_vector_clocks(&mut self.vector_clock, &packet.vector_clock);
+                    //self.print(format!("VC-{:?}", self.vector_clock));
+                    match packet.data {
+                        PacketData::Request(request_machine_id, hops) => {
+                            if self.global_queue.is_empty() {
+                                if hops >= self.config.max_hops as u32 {
+                                    // Block the request_machine_id
+                                    self.blocked_machines_queue.push_back(request_machine_id);
+                                    self.print(format!("Blocked {}", request_machine_id));
+                                } else {
+                                    // Forward the request to another machine
+                                    let random_machine = self.random_machine();
+                                    self.send(random_machine, PacketData::Request(request_machine_id, hops + 1));
+                                }
                             } else {
-                                // Forward the request to another machine
-                                let random_machine = self.random_machine();
-                                self.send(random_machine, PacketData::Request(request_machine_id, hops + 1));
+                                // Honor the request
+                                let process = self.global_queue.pop_front().unwrap();
+                                self.send(request_machine_id, PacketData::Reply(process));
                             }
-                        } else {
-                            // Honor the request
-                            let process = self.global_queue.pop_front().unwrap();
-                            self.send(request_machine_id, PacketData::Reply(process));
-                        }
-                    },
-                    PacketData::Reply(mut process) => {
-                        process.status = process::Status::Runnable;
-                        self.local_queue.push_back(process);
-                        self.num_requests_sent -= 1;
-                    },
-                    PacketData::Terminate => self.running = false,
-                    PacketData::ProcessDone => unreachable!(), // Machine should not receive this packet
+                        },
+                        PacketData::Reply(mut process) => {
+                            process.status = process::Status::Runnable;
+                            self.local_queue.push_back(process);
+                            self.num_requests_sent -= 1;
+                        },
+                        PacketData::Terminate => self.running = false,
+                        PacketData::ProcessDone => unreachable!(), // Machine should not receive this packet
+                    }
                 },
                 Err(_) => return,
             }
@@ -114,8 +121,10 @@ impl Machine {
     }
 
     fn send(&mut self, to_id: usize, data: PacketData) {
+        self.vector_clock[self.id] += 1;
         let packet = Packet {
             to_id: to_id,
+            vector_clock: self.vector_clock.clone(),
             data: data,
         };
         match self.comms_send.send(packet) {
