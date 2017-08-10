@@ -20,6 +20,7 @@ pub struct SimulationWindow {
     pub export_worker : Worker<()>,
     pub generator_config : Generator,
     pub simulation_config: MachineConfig,
+    pub terminate_simulation: Option<Box<Fn()>>,
     pub show_cpu_io : bool,
 }
 
@@ -31,6 +32,7 @@ impl SimulationWindow {
             export_worker: Worker::dummy(),
             generator_config: Generator::default(),
             simulation_config: MachineConfig::new(),
+            terminate_simulation: None,
             show_cpu_io: false,
         }
     }
@@ -53,6 +55,14 @@ impl SimulationWindow {
                 } else if self.simulation_worker.working {
                     ui.text(im_str!("Simulating\nPlease Wait"));
                     self.simulation_worker.result();
+                    match self.terminate_simulation {
+                        Some(ref terminate_simulation) => {
+                            if ui.button(im_str!("Stop Simulation"), ImVec2::new(150.0, 25.0)) {
+                                terminate_simulation();
+                            }
+                        },
+                        None => {},
+                    }
                 } else {
                     // Process Generator
                     if ui.collapsing_header(im_str!("Process Generator")).default_open(true).build() {
@@ -187,27 +197,27 @@ impl SimulationWindow {
             match model.init_process {
                 Some(ref p) => {
                     let init_process = p.clone(); //TODO remove this clone
-                    let simulation_config = self.simulation_config.clone();
-                    self.simulation_worker = Worker::start(move || {
-                        let mut router = Router::new(300);
 
-                        let machine_handles : Vec<JoinHandle<()>>;
-                        {
-                            // Create the machines
-                            let mut machines = VecDeque::new();
-                            for machine_id in 0..simulation_config.num_machines as usize {
-                                machines.push_back(Machine::new(simulation_config.clone(), machine_id, &mut router));
-                            }
+                    let mut router = Router::new(300);
 
-                            // Give the init process to the first machine
-                            machines[0].global_queue.push_back(init_process);
-
-                            // Start all machine threads
-                            machine_handles = machines.into_iter().map(|mut m| thread::spawn(move || m.switch())).collect();
+                    let machine_handles : Vec<JoinHandle<()>>;
+                    {
+                        // Create the machines
+                        let mut machines = VecDeque::new();
+                        for machine_id in 0..self.simulation_config.num_machines as usize {
+                            machines.push_back(Machine::new(self.simulation_config.clone(), machine_id, &mut router));
                         }
 
-                        let terminate_simulation = router.start_router(); // TODO: Return this to main thread for early termination
+                        // Give the init process to the first machine
+                        machines[0].global_queue.push_back(init_process);
 
+                        // Start all machine threads
+                        machine_handles = machines.into_iter().map(|mut m| thread::spawn(move || m.switch())).collect();
+                    }
+
+                    self.terminate_simulation = Some(router.start_router());
+
+                    self.simulation_worker = Worker::start(move || {
                         // Wait for all machines to have finished
                         for m in machine_handles {
                             match m.join() {
