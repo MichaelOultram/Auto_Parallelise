@@ -1,6 +1,6 @@
 use std::thread;
 use std::sync::mpsc;
-use self::mpsc::{Sender, Receiver, SendError};
+use self::mpsc::{Sender, Receiver};
 use rand;
 use rand::Rng;
 use machine::PacketData as PacketData;
