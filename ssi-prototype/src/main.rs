@@ -8,29 +8,33 @@ extern crate rand;
 mod support;
 mod worker;
 
+use std::collections::VecDeque;
+
 mod simulation_window;
 use simulation_window::*;
 
-use ssi_model::process as process;
-use process::Process as Process;
-
+use ssi_model::*;
+use router::*;
 
 const CLEAR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 pub struct ModelState {
-    pub init_process: Option<Process>,
+    packets : VecDeque<Packet>,
 }
 
 impl ModelState {
     pub fn new() -> Self {
         ModelState {
-            init_process: None,
+            packets: VecDeque::new(),
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.packets = VecDeque::new();
     }
 }
 
 fn main() {
-
     let mut model_state = ModelState::new();
     let mut process_window = SimulationWindow::new();
 

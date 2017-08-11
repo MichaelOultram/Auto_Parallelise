@@ -32,6 +32,7 @@ impl Generator {
     }
 
     pub fn generate_process_tree(&self, rng : &mut rand::StdRng, dict : &Vec<String>) -> Process {
+        // TODO: Make sure each process has a unique name
         let word = rand::sample(rng, dict, 1)[0];
         let mut process = Process::new(word.clone());
         let mut children : Vec<Process> = vec![];

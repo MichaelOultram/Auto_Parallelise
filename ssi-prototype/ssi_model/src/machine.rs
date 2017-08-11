@@ -1,3 +1,5 @@
+use std::thread;
+use std::thread::JoinHandle;
 use std::sync::mpsc;
 use std::collections::VecDeque;
 
@@ -27,8 +29,25 @@ impl MachineConfig {
             max_hops: 10,
         }
     }
+
+    pub fn start_machines(&self, router: &mut Router, init_process: Process) -> Vec<JoinHandle<()>> {
+        // Create the machines
+        let mut machines = VecDeque::new();
+        for machine_id in 0..self.num_machines as usize {
+            let machine_config = self.clone();
+            let machine = Machine::new(machine_config, machine_id, router);
+            machines.push_back(machine);
+        }
+
+        // Give the init process to the first machine
+        machines[0].global_queue.push_back(init_process);
+
+        // Start all machine threads
+        machines.into_iter().map(|mut m| thread::spawn(move || m.switch())).collect()
+    }
 }
 
+#[derive(Clone)]
 pub enum NetData {
     Request(usize, u32), // consumer, hops
     Reply(Process),

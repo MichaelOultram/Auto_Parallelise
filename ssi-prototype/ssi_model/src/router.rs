@@ -12,16 +12,19 @@ pub struct Router {
     vector_clock: Vec<u32>,
 }
 
+#[derive(Clone)]
 pub struct Packet {
     pub vector_clock : Vec<u32>,
     pub data : PacketData,
 }
 
+#[derive(Clone)]
 pub enum PacketData {
     NetData(usize, NetData), // to_id, NetData
     SimData(usize, SimData), // from_id, NetData
 }
 
+#[derive(Clone)]
 pub enum SimData {
     ProcessStart(String),
     ProcessEnd(String),
@@ -52,8 +55,11 @@ impl Router {
         (machine_send, machine_receive)
     }
 
-    pub fn start_router(mut self) -> Box<Fn() -> ()> {
+    pub fn start_router(mut self) -> (Box<Fn() -> ()>, Receiver<Packet>) {
+        // Allow external communication with router thread
         let (external_send, router_receive) = mpsc::channel();
+        let (simulation_relay, external_receive) = mpsc::channel();
+
         self.receivers.push(router_receive);
         let num_machines = self.senders.len();
         thread::spawn(move || {
@@ -64,6 +70,7 @@ impl Router {
                 for receiver in self.receivers.iter() {
                     match receiver.try_recv() {
                         Ok(packet) => {
+                            simulation_relay.send(packet.clone());
                             combine_vector_clocks(&mut self.vector_clock, &packet.vector_clock);
                             //println!("[router] {:?}", self.vector_clock);
                             match packet.data {
@@ -111,13 +118,14 @@ impl Router {
                 }
             }
         });
-
-        Box::new(move || {
+        let terminate_simulation = Box::new(move || {
             external_send.send(Packet {
                 vector_clock: vec![0;num_machines as usize], // Unable to use actual vector clock
                 data: PacketData::NetData(0, NetData::Terminate),
             });
-        })
+        });
+
+        (terminate_simulation, external_receive)
     }
 
     fn terminate(&self) {
