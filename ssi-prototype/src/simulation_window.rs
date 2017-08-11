@@ -7,8 +7,8 @@ use std::fs::File;
 
 use ModelState;
 use process::*;
-use ssi_model::machine::*;
-use ssi_model::router::*;
+use machine::*;
+use router::*;
 use worker::Worker as Worker;
 
 pub struct SimulationWindow {
@@ -48,9 +48,8 @@ impl SimulationWindow {
                 if self.generator_worker.working {
                     self.init_process = self.generator_worker.result();
 
-                    match self.init_process {
-                        Some(ref mut p) => p.status = Status::Runnable,
-                        None => {},
+                    if let Some(ref mut p) = self.init_process {
+                        p.status = Status::Runnable;
                     }
                 }
                 if self.export_worker.working {
@@ -100,9 +99,10 @@ impl SimulationWindow {
                 // TODO: Export into a file
                 let init_process = self.init_process.clone();
                 self.export_worker = Worker::start(move || {
-                    match init_process {
-                        Some(ref p) => println!("{}", p.to_json()),
-                        None => println!("No process tree"),
+                    if let Some(ref p) = init_process {
+                        println!("{}", p.to_json());
+                    } else {
+                        println!("No process tree");
                     }
                 });
             }
@@ -157,9 +157,8 @@ impl SimulationWindow {
         };
         if ui.collapsing_header(im_str!("Process Tree [{}]", num_processes)).build() {
             ui.checkbox(im_str!("show cpu/io instructions"), &mut self.show_cpu_io);
-            match self.init_process {
-                Some(ref process) => SimulationWindow::render_process_tree_helper(ui, process, self.show_cpu_io),
-                None => {},
+            if let Some(ref process) = self.init_process {
+                SimulationWindow::render_process_tree_helper(ui, process, self.show_cpu_io);
             }
         }
     }
@@ -221,14 +220,11 @@ impl SimulationWindow {
         } else if section && self.simulation_worker.working {
             ui.text(im_str!("Simulating\nPlease Wait"));
             let mut reset_pressed = false;
-            match self.terminate_simulation {
-                Some(ref terminate_simulation) => {
-                    if ui.button(im_str!("Stop Simulation"), ImVec2::new(150.0, 25.0)) {
-                        terminate_simulation();
-                        reset_pressed = true;
-                    }
-                },
-                None => {},
+            if let Some(ref terminate_simulation) = self.terminate_simulation {
+                if ui.button(im_str!("Stop Simulation"), ImVec2::new(150.0, 25.0)) {
+                    terminate_simulation();
+                    reset_pressed = true;
+                }
             }
             if reset_pressed {
                 self.terminate_simulation = None;
