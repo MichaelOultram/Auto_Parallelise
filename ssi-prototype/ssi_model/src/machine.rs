@@ -127,6 +127,7 @@ impl Machine {
                             },
                             NetData::Reply(mut process) => {
                                 process.status = process::Status::Runnable;
+                                self.send_simdata(SimData::ProcessStart(process.name.clone()));
                                 self.local_queue.push_back(process);
                                 self.num_requests_sent -= 1;
                             },

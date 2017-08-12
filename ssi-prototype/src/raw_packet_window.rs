@@ -29,7 +29,7 @@ impl RawPacketWindow {
                         ui.tree_node(&ImString::new(title)).opened(false, ImGuiSetCond_FirstUseEver).build(|| {});
                     }
                 } else {
-                    ui.tree_node(im_str!("No Packets Available")).opened(false, ImGuiSetCond_FirstUseEver).build(|| {});
+                    ui.tree_node(im_str!("No simulation data")).opened(false, ImGuiSetCond_FirstUseEver).build(|| {});
                 }
             });
     }

@@ -240,8 +240,10 @@ impl SimulationWindow {
                 let init_process = p.clone(); //TODO remove this clone
 
                 model.clear(); // Clearing as running a new simulation
-                let mut router = Router::new(300);
+                model.num_machines = self.machine_config.num_machines as usize;
+                model.max_queue_length = self.machine_config.local_queue_length as u32;
 
+                let mut router = Router::new(300);
                 let machine_handles = self.machine_config.start_machines(&mut router, init_process);
 
                 let (terminate_simulation, simulation_relay) = router.start_router();
