@@ -5,20 +5,23 @@ use machine::*;
 use router::*;
 
 pub struct MachineUsageWindow {
-    plot_lines: Vec<Vec<f32>>,
-    plot_size: usize,
+    pub visible: bool,
+    pub plot_lines: Vec<Vec<f32>>,
+    pub plot_size: usize,
 }
 
 impl MachineUsageWindow {
     pub fn new() -> Self {
         MachineUsageWindow {
+            visible: true,
             plot_lines : vec![],
             plot_size: 0,
         }
     }
 
     pub fn render(&mut self, model : &mut ModelState, ui: &Ui) {
-        ui.window(im_str!("Machine Usage"))
+        if self.visible {
+            ui.window(im_str!("Machine Usage"))
             .size((324.0, 621.0), ImGuiSetCond_FirstUseEver)
             .build(|| {
                 // Print message if no simulation data
@@ -28,18 +31,21 @@ impl MachineUsageWindow {
                 }
 
                 // Reset machine plots if machine numbers are not equal
-                if true { //self.plot_lines.len() != model.num_machines {
+                if self.plot_lines.len() != model.num_machines || model.packets.len() + 1 < self.plot_size {
+                    println!("Reset plots");
                     self.reset_plots(model);
-                    self.update_machine_usage(model);
                 }
+
+                self.update_machine_usage(model);
 
                 // Render usage graphs
                 for i in 0..model.num_machines {
                     let title = ImString::new(format!("machine-{}", i));
                     ui.plot_lines(&title, &self.plot_lines.get(i).unwrap())
-                      .scale_min(0.0).scale_max(model.max_queue_length as f32).build();
+                    .scale_min(0.0).scale_max(model.max_queue_length as f32).build();
                 }
             });
+        }
     }
 
 
@@ -62,7 +68,7 @@ impl MachineUsageWindow {
 
     fn update_machine_usage(&mut self, model: &mut ModelState) {
         // Recalculate machine usage
-        for packet_i in 0..model.packets.len() {
+        for packet_i in (self.plot_size - 1)..model.packets.len() {
             let packet = model.packets.get(packet_i).unwrap();
             self.extend_plot();
 

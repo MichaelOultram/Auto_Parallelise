@@ -12,6 +12,7 @@ use router::*;
 use worker::Worker as Worker;
 
 pub struct SimulationWindow {
+    pub visible: bool,
     pub generator_worker : Worker<Process>,
     pub simulation_worker : Worker<()>,
     pub export_worker : Worker<()>,
@@ -28,6 +29,7 @@ pub struct SimulationWindow {
 impl SimulationWindow {
     pub fn new() -> Self {
         SimulationWindow {
+            visible: true,
             generator_worker: Worker::dummy(),
             simulation_worker: Worker::dummy(),
             export_worker: Worker::dummy(),
@@ -41,7 +43,8 @@ impl SimulationWindow {
     }
 
     pub fn render(&mut self, model : &mut ModelState, ui: &Ui) {
-        ui.window(im_str!("Simulation"))
+        if self.visible {
+            ui.window(im_str!("Simulation"))
             .size((324.0, 621.0), ImGuiSetCond_FirstUseEver)
             .build(|| {
                 // Check workers if they are running every loop
@@ -69,6 +72,7 @@ impl SimulationWindow {
                 self.render_process_tree_section(ui);
                 self.render_simulation_section(model, ui);
             });
+        }
     }
 }
 
@@ -152,7 +156,7 @@ impl SimulationWindow {
 impl SimulationWindow {
     fn render_process_tree_section(&mut self, ui : &Ui) {
         let num_processes = match self.init_process {
-            Some(ref p) => p.num_processes(),
+            Some(ref p) => p.num_processes(), //TODO: Cache this number
             None => 0,
         };
         if ui.collapsing_header(im_str!("Process Tree [{}]", num_processes)).build() {

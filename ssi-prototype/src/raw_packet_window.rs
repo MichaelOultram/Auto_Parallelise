@@ -5,6 +5,7 @@ use machine::*;
 use router::*;
 
 pub struct RawPacketWindow {
+    pub visible: bool,
     pub show_vector_clock : bool,
     pub show_packet_type : bool,
 }
@@ -12,13 +13,15 @@ pub struct RawPacketWindow {
 impl RawPacketWindow {
     pub fn new() -> Self {
         RawPacketWindow {
+            visible: true,
             show_vector_clock: false,
             show_packet_type: true,
         }
     }
 
     pub fn render(&mut self, model : &mut ModelState, ui: &Ui) {
-        ui.window(im_str!("Raw Packet Viewer"))
+        if self.visible {
+            ui.window(im_str!("Raw Packet Viewer"))
             .size((324.0, 621.0), ImGuiSetCond_FirstUseEver)
             .build(|| {
                 ui.checkbox(im_str!("show vector clock"), &mut self.show_vector_clock);
@@ -32,6 +35,7 @@ impl RawPacketWindow {
                     ui.tree_node(im_str!("No simulation data")).opened(false, ImGuiSetCond_FirstUseEver).build(|| {});
                 }
             });
+        }
     }
 
     fn render_packet(&self, packet: &Packet) -> String {

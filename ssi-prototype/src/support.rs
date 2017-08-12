@@ -8,7 +8,12 @@ struct MouseState {
     wheel: f32,
 }
 
-pub fn run<F: FnMut(&Ui) -> bool>(title: String, clear_color: [f32; 4], mut run_ui: F) {
+pub struct RenderStats {
+    pub frames_per_second : f32,
+    pub frame_time: f32,
+}
+
+pub fn run<F: FnMut(&Ui, RenderStats) -> bool>(title: String, clear_color: [f32; 4], mut run_ui: F) {
     use glium::glutin;
     use glium::{Display, Surface};
     use imgui_glium_renderer::Renderer;
@@ -107,8 +112,12 @@ pub fn run<F: FnMut(&Ui) -> bool>(title: String, clear_color: [f32; 4], mut run_
         let size_points = gl_window.get_inner_size_points().unwrap();
         let size_pixels = gl_window.get_inner_size_pixels().unwrap();
 
+        let render_stats = RenderStats {
+            frames_per_second: imgui.get_frame_rate().clone(),
+            frame_time: delta_s.clone() * 1000.0,
+        };
         let ui = imgui.frame(size_points, size_pixels, delta_s);
-        if !run_ui(&ui) {
+        if !run_ui(&ui, render_stats) {
             break;
         }
 
