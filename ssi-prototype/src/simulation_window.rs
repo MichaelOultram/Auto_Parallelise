@@ -11,19 +11,27 @@ use machine::*;
 use router::*;
 use worker::Worker as Worker;
 
+enum ProcessTreeLine {
+    Process(ImString, Vec<ProcessTreeLine>),
+    IO(ImString),
+}
+
 pub struct SimulationWindow {
     pub visible: bool,
-    pub generator_worker : Worker<Process>,
-    pub simulation_worker : Worker<()>,
-    pub export_worker : Worker<()>,
-    pub terminate_simulation: Option<Box<Fn()>>,
-    pub simulation_relay: Option<Receiver<Packet>>,
+    generator_worker : Worker<Process>,
+    simulation_worker : Worker<()>,
+    export_worker : Worker<()>,
+    terminate_simulation: Option<Box<Fn()>>,
+    simulation_relay: Option<Receiver<Packet>>,
 
-    pub generator_config : Generator,
-    pub machine_config: MachineConfig,
-    pub init_process: Option<Process>,
+    generator_config : Generator,
+    machine_config: MachineConfig,
 
-    pub show_cpu_io : bool,
+    init_process: Option<Process>,
+    num_processes: u32,
+    process_tree: Option<ProcessTreeLine>,
+
+    show_cpu_io : bool,
 }
 
 impl SimulationWindow {
@@ -35,7 +43,11 @@ impl SimulationWindow {
             export_worker: Worker::dummy(),
             generator_config: Generator::default(),
             machine_config: MachineConfig::new(),
+
             init_process: None,
+            num_processes: 0,
+            process_tree: None,
+
             terminate_simulation: None,
             simulation_relay: None,
             show_cpu_io: false,
@@ -49,11 +61,13 @@ impl SimulationWindow {
             .build(|| {
                 // Check workers if they are running every loop
                 if self.generator_worker.working {
-                    self.init_process = self.generator_worker.result();
-
-                    if let Some(ref mut p) = self.init_process {
-                        p.status = Status::Runnable;
+                    let init_process = self.generator_worker.result();
+                    if let Some(ref p) = init_process {
+                        // Format results for UI
+                        self.num_processes = p.num_processes();
+                        self.process_tree = Some(self.calculate_process_tree(p));
                     }
+                    self.init_process = init_process;
                 }
                 if self.export_worker.working {
                     self.export_worker.result();
@@ -88,7 +102,9 @@ impl SimulationWindow {
                 self.generator_worker = Worker::start(move || {
                     let dict = SimulationWindow::dictionary();
                     let mut rng = rand::StdRng::new().unwrap();
-                    generator.generate_process_tree(&mut rng, &dict)
+                    let mut p = generator.generate_process_tree(&mut rng, &dict);
+                    p.status = Status::Runnable;
+                    p
                 });
             }
 
@@ -155,41 +171,53 @@ impl SimulationWindow {
 // Process tree functions
 impl SimulationWindow {
     fn render_process_tree_section(&mut self, ui : &Ui) {
-        let num_processes = match self.init_process {
-            Some(ref p) => p.num_processes(), //TODO: Cache this number
-            None => 0,
-        };
-        if ui.collapsing_header(im_str!("Process Tree [{}]", num_processes)).build() {
+        if ui.collapsing_header(im_str!("Process Tree [{}]", self.num_processes)).build() {
             ui.checkbox(im_str!("show cpu/io instructions"), &mut self.show_cpu_io);
-            if let Some(ref process) = self.init_process {
-                SimulationWindow::render_process_tree_helper(ui, process, self.show_cpu_io);
+            if let Some(ref process_tree) = self.process_tree {
+                self.render_process_tree_helper(ui, process_tree, self.show_cpu_io);
             }
         }
     }
 
-    fn render_process_tree_helper(ui : &Ui, process: &Process, display_cpu_io : bool) {
-        ui.tree_node(&ImString::new(process.to_string()))
-            .opened(true, ImGuiSetCond_FirstUseEver)
-            .build(|| {
-                let mut instruction_count = 0;
-                for instruction in &process.program {
-                    match instruction {
-                        &Instruction::Spawn(ref p) => {
-                            if display_cpu_io && instruction_count > 0 {
-                                ui.tree_node(&ImString::new(format!("{} instructions", instruction_count)))
-                                    .opened(false, ImGuiSetCond_FirstUseEver).build(|| {});
-                            }
-                            SimulationWindow::render_process_tree_helper(ui, p, display_cpu_io);
-                            instruction_count = 0;
-                        },
-                        _ => instruction_count += 1, //TODO: Count CPU and IO separately
+    fn calculate_process_tree(&mut self, process : &Process) -> ProcessTreeLine {
+        let mut children = vec![];
+        // Check program for more processes
+        let mut instruction_count = 0;
+        for instruction in &process.program {
+            match instruction {
+                &Instruction::Spawn(ref p) => {
+                    if instruction_count > 0 {
+                        let line = ImString::new(format!("{} instructions", instruction_count));
+                        children.push(ProcessTreeLine::IO(line));
                     }
-                }
-                if display_cpu_io && instruction_count > 0 {
-                    ui.tree_node(&ImString::new(format!("{} instructions", instruction_count)))
-                        .opened(false, ImGuiSetCond_FirstUseEver).build(|| {});
-                }
-            });
+                    children.push(self.calculate_process_tree(p));
+                },
+                _ => instruction_count += 1, //TODO: Count CPU and IO separately
+            }
+        }
+        if instruction_count > 0 {
+            let line = ImString::new(format!("{} instructions", instruction_count));
+            children.push(ProcessTreeLine::IO(line));
+        }
+
+
+        let line = ImString::new(process.to_string());
+        ProcessTreeLine::Process(line, children)
+    }
+
+    fn render_process_tree_helper(&self, ui : &Ui, process_line: &ProcessTreeLine, display_cpu_io : bool) {
+        match process_line {
+            &ProcessTreeLine::Process(ref line, ref children) => {
+                ui.tree_node(line).opened(true, ImGuiSetCond_FirstUseEver).build(|| {
+                    for c in children {
+                        self.render_process_tree_helper(ui, c, display_cpu_io);
+                    }
+                });
+            },
+            &ProcessTreeLine::IO(ref line) => if display_cpu_io {
+                ui.tree_node(line).opened(false, ImGuiSetCond_FirstUseEver).build(|| {});
+            },
+        }
     }
 }
 

@@ -8,8 +8,6 @@ extern crate rand;
 mod support;
 mod worker;
 
-use imgui::*;
-
 use std::collections::VecDeque;
 
 mod simulation_window;
