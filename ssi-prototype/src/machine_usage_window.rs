@@ -1,13 +1,14 @@
 use imgui::*;
 
 use ModelState;
-use machine::*;
 use router::*;
 
 pub struct MachineUsageWindow {
     pub visible: bool,
     pub plot_lines: Vec<Vec<f32>>,
     pub plot_size: usize,
+    pub scale_min: i32,
+    pub scale_max: i32,
 }
 
 impl MachineUsageWindow {
@@ -16,6 +17,8 @@ impl MachineUsageWindow {
             visible: true,
             plot_lines : vec![],
             plot_size: 0,
+            scale_min: 0,
+            scale_max: 1,
         }
     }
 
@@ -38,11 +41,36 @@ impl MachineUsageWindow {
 
                 self.update_machine_usage(model);
 
+                let prev_min = self.scale_min;
+                ui.slider_int(im_str!("Scale min"), &mut self.scale_min, 0, model.max_queue_length as i32 - 1).build();
+                ui.slider_int(im_str!("Scale max"), &mut self.scale_max, 1, model.max_queue_length as i32).build();
+                ui.separator();
+
+                // Push the other slide so start is never before end
+                if self.scale_min >= self.scale_max {
+                    if prev_min != self.scale_min {
+                        self.scale_max = self.scale_min + 1;
+                    } else {
+                        self.scale_min = self.scale_max - 1;
+                    }
+                }
+
                 // Render usage graphs
                 for i in 0..model.num_machines {
                     let title = ImString::new(format!("machine-{}", i));
-                    ui.plot_lines(&title, &self.plot_lines.get(i).unwrap())
-                    .scale_min(0.0).scale_max(model.max_queue_length as f32).build();
+                    let full_plot = self.plot_lines.get(i).unwrap();
+                    let mut start_point = (model.start_time_plot * self.plot_size as f32) as usize;
+                    let mut end_point = (model.end_time_plot * self.plot_size as f32) as usize;
+
+                    if end_point > self.plot_size {
+                        end_point = self.plot_size;
+                    }
+                    if start_point >= end_point {
+                        start_point = end_point - 1;
+                    }
+
+                    ui.plot_lines(&title, &full_plot[start_point..end_point])
+                    .scale_min(self.scale_min as f32).scale_max(self.scale_max as f32).build();
                 }
             });
         }
@@ -52,6 +80,8 @@ impl MachineUsageWindow {
     fn reset_plots(&mut self, model : &mut ModelState) {
         self.plot_lines = vec![];
         self.plot_size = 1;
+        self.scale_min = 0;
+        self.scale_max = model.max_queue_length as i32;
         for i in 0..model.num_machines {
             self.plot_lines.insert(i, vec![0.0]);
         }

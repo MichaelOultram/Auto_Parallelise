@@ -19,8 +19,8 @@ use raw_packet_window::*;
 mod machine_usage_window;
 use machine_usage_window::*;
 
-mod ui_performance_window;
-use ui_performance_window::*;
+mod timescale_window;
+use timescale_window::*;
 
 use ssi_model::*;
 use router::*;
@@ -28,9 +28,12 @@ use router::*;
 const CLEAR_COLOR: [f32; 4] = [0.2, 0.2, 0.2, 1.0];
 
 pub struct ModelState {
-    num_machines: usize,
-    packets : VecDeque<Packet>,
-    max_queue_length: u32,
+    pub num_machines: usize,
+    pub packets : VecDeque<Packet>,
+    pub max_queue_length: u32,
+
+    pub start_time_plot: f32,
+    pub end_time_plot: f32,
 }
 
 impl ModelState {
@@ -39,6 +42,8 @@ impl ModelState {
             num_machines: 0,
             max_queue_length: 0,
             packets: VecDeque::new(),
+            start_time_plot: 0.0,
+            end_time_plot: 1.0,
         }
     }
 
@@ -52,23 +57,29 @@ fn main() {
     let mut simulation_window = SimulationWindow::new();
     let mut raw_packet_window = RawPacketWindow::new();
     let mut machine_usage_window = MachineUsageWindow::new();
-    let mut ui_performance_window = UIPerformanceWindow::new();
+    let mut timescale_window = TimescaleWindow::new();
 
     support::run("ssi-prototype".to_string(), CLEAR_COLOR, move |ui, render_stats| {
         ui.main_menu_bar(|| {
             ui.menu(im_str!("File")).build(|| {});
+
             ui.menu(im_str!("Windows")).build(|| {
                 ui.menu_item(im_str!("Simulation")).selected(&mut simulation_window.visible).build();
+                ui.separator();
+                ui.menu_item(im_str!("Timescale Window")).selected(&mut timescale_window.visible).build();
                 ui.menu_item(im_str!("Raw Packet Viewer")).selected(&mut raw_packet_window.visible).build();
                 ui.menu_item(im_str!("Machine Usage")).selected(&mut machine_usage_window.visible).build();
             });
+
+            // UI Performance
+            ui.text(im_str!("{} FPS, {} ms", render_stats.frames_per_second as u32, render_stats.frame_time as u32));
         });
 
 
         simulation_window.render(&mut model_state, ui);
         raw_packet_window.render(&mut model_state, ui);
         machine_usage_window.render(&mut model_state, ui);
-        ui_performance_window.render(render_stats, ui);
+        timescale_window.render(&mut model_state, ui);
 
         true
     });

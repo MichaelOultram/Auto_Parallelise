@@ -275,7 +275,7 @@ impl SimulationWindow {
                 model.num_machines = self.machine_config.num_machines as usize;
                 model.max_queue_length = self.machine_config.local_queue_length as u32;
 
-                let mut router = Router::new(300);
+                let mut router = Router::new(self.num_processes);
                 let machine_handles = self.machine_config.start_machines(&mut router, init_process);
 
                 let (terminate_simulation, simulation_relay) = router.start_router();

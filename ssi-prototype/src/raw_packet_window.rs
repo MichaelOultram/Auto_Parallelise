@@ -13,7 +13,7 @@ pub struct RawPacketWindow {
 impl RawPacketWindow {
     pub fn new() -> Self {
         RawPacketWindow {
-            visible: true,
+            visible: false,
             show_vector_clock: false,
             show_packet_type: true,
         }

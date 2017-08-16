@@ -23,8 +23,8 @@ pub struct MachineConfig {
 impl MachineConfig {
     pub fn new() -> Self {
         MachineConfig {
-            num_machines: 10,
-            local_queue_length: 3,
+            num_machines: 5,
+            local_queue_length: 10,
             num_cycles_per_context: 100,
             max_hops: 10,
         }
