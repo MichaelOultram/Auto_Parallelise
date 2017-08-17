@@ -1,19 +1,23 @@
 #[naked]
 pub unsafe extern fn syscall() {
     #[inline(never)]
-    unsafe fn inner(stack: &mut SyscallStack) {
+    unsafe fn inner() {
         extern {
-            fn syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize, rbp: usize, stack: &mut SyscallStack) -> usize;
+            fn syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize, stack: usize) -> usize;
         }
 
         let mut a;
         {
             let b;
-            let rbp;
-            asm!("" : "={rax}"(a), "={rbx}"(b), "={rbp}"(rbp)
+            let c;
+            let d;
+            let e;
+            let f;
+            let stack;
+            asm!("" : "={rax}"(a), "={rbx}"(b), "={rcx}"(c), "={rdx}"(d), "={rsi}"(e), "={rdi}"(f), "={rbp}"(stack)
                 : : : "intel", "volatile");
 
-            a = syscall(a, b, stack.rcx, stack.rdx, stack.rsi, stack.rdi, rbp, stack);
+            a = syscall(a, b, c, d, e, f, stack);
         }
 
         asm!("" : : "{rax}"(a) : : "intel", "volatile");
@@ -33,11 +37,7 @@ pub unsafe extern fn syscall() {
         mov fs, r11"
         : : : : "intel", "volatile");
 
-    // Get reference to stack variables
-    let rsp: usize;
-    asm!("" : "={rsp}"(rsp) : : : "intel", "volatile");
-
-    inner(&mut *(rsp as *mut SyscallStack));
+    inner();
 
     // Interrupt return
     asm!("pop fs
@@ -51,23 +51,6 @@ pub unsafe extern fn syscall() {
         pop rcx
         iretq"
         : : : : "intel", "volatile");
-}
-
-#[allow(dead_code)]
-#[repr(packed)]
-pub struct SyscallStack {
-    pub fs: usize,
-    pub r11: usize,
-    pub r10: usize,
-    pub r9: usize,
-    pub r8: usize,
-    pub rsi: usize,
-    pub rdi: usize,
-    pub rdx: usize,
-    pub rcx: usize,
-    pub rip: usize,
-    pub cs: usize,
-    pub rflags: usize,
 }
 
 #[naked]

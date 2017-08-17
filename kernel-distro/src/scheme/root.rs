@@ -71,11 +71,7 @@ impl Scheme for RootScheme {
         }
     }
 
-    fn dup(&self, file: usize, buf: &[u8]) -> Result<usize> {
-        if ! buf.is_empty() {
-            return Err(Error::new(EINVAL));
-        }
-
+    fn dup(&self, file: usize, _buf: &[u8]) -> Result<usize> {
         let mut handles = self.handles.write();
         let inner = {
             let inner = handles.get(&file).ok_or(Error::new(EBADF))?;

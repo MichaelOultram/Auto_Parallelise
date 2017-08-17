@@ -17,7 +17,6 @@ use self::error::{Error, Result, ENOSYS};
 use self::number::*;
 
 use context::ContextId;
-use interrupt::syscall::SyscallStack;
 use scheme::{FileHandle, SchemeNamespace};
 
 /// Driver syscalls
@@ -42,9 +41,9 @@ pub mod time;
 pub mod validate;
 
 #[no_mangle]
-pub extern fn syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize, bp: usize, stack: &mut SyscallStack) -> usize {
+pub extern fn syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize, stack: usize) -> usize {
     #[inline(always)]
-    fn inner(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize, bp: usize, stack: &mut SyscallStack) -> Result<usize> {
+    fn inner(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize, stack: usize) -> Result<usize> {
         match a & SYS_CLASS {
             SYS_CLASS_FILE => {
                 let fd = FileHandle::from(b);
@@ -83,9 +82,8 @@ pub extern fn syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize
                 SYS_FUTEX => futex(validate_slice_mut(b as *mut i32, 1).map(|uaddr| &mut uaddr[0])?, c, d as i32, e, f as *mut i32),
                 SYS_BRK => brk(b),
                 SYS_GETPID => getpid().map(ContextId::into),
-                SYS_GETPGID => getpgid(ContextId::from(b)).map(ContextId::into),
                 SYS_GETPPID => getppid().map(ContextId::into),
-                SYS_CLONE => clone(b, bp).map(ContextId::into),
+                SYS_CLONE => clone(b, stack).map(ContextId::into),
                 SYS_EXIT => exit((b & 0xFF) << 8),
                 SYS_KILL => kill(ContextId::from(b), c),
                 SYS_WAITPID => waitpid(ContextId::from(b), c, d).map(ContextId::into),
@@ -100,7 +98,6 @@ pub extern fn syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize
                 SYS_GETNS => getns(),
                 SYS_GETUID => getuid(),
                 SYS_MKNS => mkns(validate_slice(b as *const [usize; 2], c)?),
-                SYS_SETPGID => setpgid(ContextId::from(b), ContextId::from(c)),
                 SYS_SETREUID => setreuid(b as u32, c as u32),
                 SYS_SETRENS => setrens(SchemeNamespace::from(b), SchemeNamespace::from(c)),
                 SYS_SETREGID => setregid(b as u32, c as u32),
@@ -130,7 +127,7 @@ pub extern fn syscall(a: usize, b: usize, c: usize, d: usize, e: usize, f: usize
         }
     }
 
-    let result = inner(a, b, c, d, e, f, bp, stack);
+    let result = inner(a, b, c, d, e, f, stack);
 
     /*
     if let Err(ref err) = result {

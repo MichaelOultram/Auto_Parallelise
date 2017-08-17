@@ -1,9 +1,8 @@
-use interrupt::syscall::SyscallStack;
 use memory::{allocate_frames, deallocate_frames, Frame};
 use paging::{entry, ActivePageTable, PhysicalAddress, VirtualAddress};
 use context;
 use context::memory::Grant;
-use syscall::error::{Error, EFAULT, EINVAL, ENOMEM, EPERM, ESRCH, Result};
+use syscall::error::{Error, EFAULT, ENOMEM, EPERM, ESRCH, Result};
 use syscall::flag::{MAP_WRITE, MAP_WRITE_COMBINE};
 
 fn enforce_root() -> Result<()> {
@@ -17,15 +16,10 @@ fn enforce_root() -> Result<()> {
     }
 }
 
-pub fn iopl(level: usize, stack: &mut SyscallStack) -> Result<usize> {
+pub fn iopl(_level: usize, _stack_base: usize) -> Result<usize> {
     enforce_root()?;
 
-    if level > 3 {
-        return Err(Error::new(EINVAL));
-    }
-
-    stack.rflags = (stack.rflags & !(3 << 12)) | ((level & 3) << 12);
-
+    //TODO
     Ok(0)
 }
 

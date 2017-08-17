@@ -65,11 +65,7 @@ impl Scheme for InitFsScheme {
         Err(Error::new(ENOENT))
     }
 
-    fn dup(&self, id: usize, buf: &[u8]) -> Result<usize> {
-        if ! buf.is_empty() {
-            return Err(Error::new(EINVAL));
-        }
-
+    fn dup(&self, id: usize, _buf: &[u8]) -> Result<usize> {
         let (path, flags, data, mode, seek) = {
             let handles = self.handles.read();
             let handle = handles.get(&id).ok_or(Error::new(EBADF))?;

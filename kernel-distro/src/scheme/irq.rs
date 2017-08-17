@@ -48,11 +48,7 @@ impl Scheme for IrqScheme {
         }
     }
 
-    fn dup(&self, file: usize, buf: &[u8]) -> Result<usize> {
-        if ! buf.is_empty() {
-            return Err(Error::new(EINVAL));
-        }
-
+    fn dup(&self, file: usize, _buf: &[u8]) -> Result<usize> {
         Ok(file)
     }
 

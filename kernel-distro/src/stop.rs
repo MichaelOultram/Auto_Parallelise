@@ -2,23 +2,6 @@ use acpi;
 use syscall::io::{Io, Pio};
 
 #[no_mangle]
-pub unsafe extern fn kreset() -> ! {
-    println!("kreset");
-
-    // 8042 reset
-    {
-        println!("Reset with 8042");
-        let mut port = Pio::<u8>::new(0x64);
-        while port.readf(2) {}
-        port.write(0xFE);
-    }
-
-    // TODO: Use triple fault to guarantee reset
-
-    unreachable!();
-}
-
-#[no_mangle]
 pub unsafe extern fn kstop() -> ! {
     println!("kstop");
 
@@ -39,7 +22,7 @@ pub unsafe extern fn kstop() -> ! {
                     }
                 }
             }
-
+            
             println!("Shutdown with ACPI outw(0x{:X}, 0x{:X})", port, val);
             Pio::<u16>::new(port).write(val);
         }
