@@ -1,6 +1,7 @@
 extern crate glium;
 #[macro_use]
 extern crate imgui;
+extern crate imgui_sys;
 extern crate imgui_glium_renderer;
 extern crate ssi_model;
 extern crate rand;
@@ -21,6 +22,9 @@ use machine_usage_window::*;
 
 mod timescale_window;
 use timescale_window::*;
+
+mod custom_render_window;
+use custom_render_window::*;
 
 use ssi_model::*;
 use router::*;
@@ -58,6 +62,8 @@ fn main() {
     let mut raw_packet_window = RawPacketWindow::new();
     let mut machine_usage_window = MachineUsageWindow::new();
     let mut timescale_window = TimescaleWindow::new();
+    let mut custom_render_window = CustomRenderWindow::new();
+
 
     support::run("ssi-prototype".to_string(), CLEAR_COLOR, move |ui, render_stats| {
         ui.main_menu_bar(|| {
@@ -80,6 +86,7 @@ fn main() {
         raw_packet_window.render(&mut model_state, ui);
         machine_usage_window.render(&mut model_state, ui);
         timescale_window.render(&mut model_state, ui);
+        custom_render_window.render(&mut model_state, ui);
 
         true
     });

@@ -6,19 +6,23 @@ use router::*;
 pub struct MachineUsageWindow {
     pub visible: bool,
     pub plot_lines: Vec<Vec<f32>>,
+    pub wait_queue: u32, // Processes that have spawned, but have not started yet
     pub plot_size: usize,
     pub scale_min: i32,
     pub scale_max: i32,
+    pub scale_max_max: i32,
 }
 
 impl MachineUsageWindow {
     pub fn new() -> Self {
         MachineUsageWindow {
             visible: true,
-            plot_lines : vec![],
+            plot_lines : vec![], // last index is wait_queue
+            wait_queue: 1, // The init process is never spawned
             plot_size: 0,
             scale_min: 0,
             scale_max: 1,
+            scale_max_max: 1,
         }
     }
 
@@ -34,7 +38,7 @@ impl MachineUsageWindow {
                 }
 
                 // Reset machine plots if machine numbers are not equal
-                if self.plot_lines.len() != model.num_machines || model.packets.len() + 1 < self.plot_size {
+                if self.plot_lines.len() != model.num_machines + 1 || model.packets.len() + 1 < self.plot_size {
                     println!("Reset plots");
                     self.reset_plots(model);
                 }
@@ -42,8 +46,8 @@ impl MachineUsageWindow {
                 self.update_machine_usage(model);
 
                 let prev_min = self.scale_min;
-                ui.slider_int(im_str!("Scale min"), &mut self.scale_min, 0, model.max_queue_length as i32 - 1).build();
-                ui.slider_int(im_str!("Scale max"), &mut self.scale_max, 1, model.max_queue_length as i32).build();
+                ui.slider_int(im_str!("Scale min"), &mut self.scale_min, 0, self.scale_max_max - 1).build();
+                ui.slider_int(im_str!("Scale max"), &mut self.scale_max, 1, self.scale_max_max).build();
                 ui.separator();
 
                 // Push the other slide so start is never before end
@@ -56,8 +60,14 @@ impl MachineUsageWindow {
                 }
 
                 // Render usage graphs
-                for i in 0..model.num_machines {
-                    let title = ImString::new(format!("machine-{}", i));
+                for i in 0..model.num_machines+1 {
+                    let title = if i < model.num_machines {
+                        ImString::new(format!("machine-{}", i))
+                    } else {
+                        ImString::new(format!("wait_queue"))
+                    };
+
+
                     let full_plot = self.plot_lines.get(i).unwrap();
                     let mut start_point = (model.start_time_plot * self.plot_size as f32) as usize;
                     let mut end_point = (model.end_time_plot * self.plot_size as f32) as usize;
@@ -79,19 +89,36 @@ impl MachineUsageWindow {
 
     fn reset_plots(&mut self, model : &mut ModelState) {
         self.plot_lines = vec![];
+        self.wait_queue = 1;
         self.plot_size = 1;
         self.scale_min = 0;
         self.scale_max = model.max_queue_length as i32;
-        for i in 0..model.num_machines {
+        self.scale_max_max = model.max_queue_length as i32;
+        for i in 0..model.num_machines + 1 { // Extra 1 is for the wait_queue
             self.plot_lines.insert(i, vec![0.0]);
         }
     }
 
     fn extend_plot(&mut self) {
-        for i in 0..self.plot_lines.len() {
+        let num_plots = self.plot_lines.len();
+        for i in 0..num_plots {
             let plot = self.plot_lines.get_mut(i).unwrap();
             let last_element = plot.get(self.plot_size - 1).unwrap().clone();
-            plot.insert(self.plot_size, last_element);
+
+            // Extend the maxium scale if there is an element bigger
+            if last_element > self.scale_max_max as f32 {
+                if self.scale_max == self.scale_max_max {
+                    self.scale_max = last_element as i32;
+                }
+                self.scale_max_max = last_element as i32;
+            }
+
+            if i != num_plots - 1 {
+                plot.insert(self.plot_size, last_element);
+            } else {
+                // The last plot is the wait queue
+                plot.insert(self.plot_size, self.wait_queue as f32);
+            }
         }
         self.plot_size += 1;
     }
@@ -106,9 +133,12 @@ impl MachineUsageWindow {
                 let vec = self.plot_lines.get_mut(from_id.clone()).unwrap();
                 let last_element = vec.get_mut(self.plot_size - 1).unwrap();
                 match data {
-                    &SimData::ProcessStart(_) => *last_element += 1.0,
+                    &SimData::ProcessStart(_) => {
+                        *last_element += 1.0;
+                        self.wait_queue -= 1; // Spawned process is no longer waiting
+                    },
                     &SimData::ProcessEnd(_) => *last_element -= 1.0,
-                    &SimData::ProcessSpawn(_) => {},
+                    &SimData::ProcessSpawn(_) => self.wait_queue += 1,
                 }
             }
         }
