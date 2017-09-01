@@ -20,6 +20,7 @@ impl CustomRenderWindow {
 
     pub fn render(&mut self, model : &mut ModelState, ui: &Ui) {
         if self.visible {
+
             ui.window(im_str!("Custom Render"))
             .size((324.0, 621.0), ImGuiSetCond_FirstUseEver)
             .build(|| {
@@ -91,10 +92,11 @@ impl CustomRenderWindow {
         right_slider.x += slider_width - 2.0 * slider_margin;
 
         // Add to the draw list
+        let button_id : i8 = 0;
         unsafe {
             ImDrawList_AddRectFilled(draw_list, bar_start, bar_end, col32_bkg_gray, 0.0, 0);
             ImDrawList_AddRectFilled(draw_list, left_slider, right_slider, col32_frg_gray, 5.0, 15); // 5.0 and 15 are for rounding all the corners
-            igDummy(&slider_size);
+            igInvisibleButton(&button_id, slider_size);
         }
 
     }
