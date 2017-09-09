@@ -19,6 +19,7 @@
 #![feature(never_type)]
 #![feature(thread_local)]
 #![feature(unique)]
+#![feature(conservative_impl_trait)]
 #![no_std]
 
 extern crate alloc_kernel as allocator;
@@ -42,9 +43,10 @@ pub use consts::*;
 /// Shared data structures
 pub mod common;
 
-/// Macros like print, println, and interrupt
+/// Architecture-dependent stuff
 #[macro_use]
-pub mod macros;
+pub mod arch;
+pub use arch::*;
 
 /// Constants like memory locations
 pub mod consts;
@@ -55,8 +57,8 @@ mod acpi;
 /// Context management
 pub mod context;
 
-/// Devices
-pub mod device;
+/// Architecture-independent devices
+pub mod devices;
 
 /// ELF file parsing
 pub mod elf;
@@ -64,32 +66,14 @@ pub mod elf;
 /// External functions
 pub mod externs;
 
-/// Global descriptor table
-pub mod gdt;
-
-/// Interrupt descriptor table
-mod idt;
-
-/// Interrupt instructions
-pub mod interrupt;
-
 /// Memory management
 pub mod memory;
-
-/// Paging
-pub mod paging;
 
 /// Panic
 pub mod panic;
 
 /// Schemes, filesystem handlers
 pub mod scheme;
-
-/// Initialization and start function
-pub mod start;
-
-/// Shutdown function
-pub mod stop;
 
 /// Synchronization primitives
 pub mod sync;

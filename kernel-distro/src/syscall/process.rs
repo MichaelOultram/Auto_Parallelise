@@ -1,4 +1,3 @@
-///! Process syscalls
 use alloc::allocator::{Alloc, Layout};
 use alloc::arc::Arc;
 use alloc::boxed::Box;
@@ -15,12 +14,13 @@ use start::usermode;
 use interrupt;
 use context;
 use context::ContextId;
+use context::file::FileDescriptor;
 use elf::{self, program_header};
-use scheme::{self, FileHandle};
+use scheme::FileHandle;
 use syscall;
 use syscall::data::{SigAction, Stat};
 use syscall::error::*;
-use syscall::flag::{CLONE_VFORK, CLONE_VM, CLONE_FS, CLONE_FILES, CLONE_SIGHAND, O_CLOEXEC, SIG_DFL, WNOHANG};
+use syscall::flag::{CLONE_VFORK, CLONE_VM, CLONE_FS, CLONE_FILES, CLONE_SIGHAND, SIG_DFL, SIGTERM, WNOHANG};
 use syscall::validate::{validate_slice, validate_slice_mut};
 
 pub fn brk(address: usize) -> Result<usize> {
@@ -64,6 +64,7 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
     let ppid;
     let pid;
     {
+        let pgid;
         let ruid;
         let rgid;
         let rns;
@@ -95,6 +96,7 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
             let context = context_lock.read();
 
             ppid = context.id;
+            pgid = context.pgid;
             ruid = context.ruid;
             rgid = context.rgid;
             rns = context.rns;
@@ -282,27 +284,11 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
         if flags & CLONE_FILES == 0 {
             for (_fd, mut file_option) in files.lock().iter_mut().enumerate() {
                 let new_file_option = if let Some(ref file) = *file_option {
-                    let result = {
-                        let scheme = {
-                            let schemes = scheme::schemes();
-                            let scheme = schemes.get(file.scheme).ok_or(Error::new(EBADF))?;
-                            scheme.clone()
-                        };
-                        scheme.dup(file.number, b"")
-                    };
-                    match result {
-                        Ok(new_number) => {
-                            Some(context::file::File {
-                                scheme: file.scheme,
-                                number: new_number,
-                                flags: file.flags,
-                                event: None,
-                            })
-                        },
-                        Err(_err) => {
-                            None
-                        }
-                    }
+                    Some(FileDescriptor {
+                        description: Arc::clone(&file.description),
+                        event: None,
+                        cloexec: file.cloexec,
+                    })
                 } else {
                     None
                 };
@@ -331,6 +317,7 @@ pub fn clone(flags: usize, stack_base: usize) -> Result<ContextId> {
 
             pid = context.id;
 
+            context.pgid = pgid;
             context.ppid = ppid;
             context.ruid = ruid;
             context.rgid = rgid;
@@ -584,16 +571,24 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
 
             if data.starts_with(b"#!") {
                 if let Some(line) = data[2..].split(|&b| b == b'\n').next() {
+                    // Strip whitespace
+                    let line = &line[line.iter().position(|&b| b != b' ')
+                                         .unwrap_or(0)..];
+                    let executable = line.split(|x| *x == b' ').next().unwrap_or(b"");
+                    let mut parts = line.split(|x| *x == b' ')
+                        .map(|x| x.iter().cloned().collect::<Vec<_>>())
+                        .collect::<Vec<_>>();
                     if ! args.is_empty() {
                         args.remove(0);
                     }
-                    args.insert(0, canonical);
-                    args.insert(0, line.to_vec());
+                    parts.push(path.to_vec());
+                    parts.extend(args.iter().cloned());
+                    args = parts;
                     canonical = {
                         let contexts = context::contexts();
                         let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
                         let context = context_lock.read();
-                        context.canonicalize(line)
+                        context.canonicalize(executable)
                     };
                 } else {
                     println!("invalid script {}", unsafe { str::from_utf8_unchecked(path) });
@@ -611,8 +606,8 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
                 drop(path); // Drop so that usage is not allowed after unmapping context
                 drop(arg_ptrs); // Drop so that usage is not allowed after unmapping context
 
-                let contexts = context::contexts();
                 let (vfork, ppid, files) = {
+                    let contexts = context::contexts();
                     let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
                     let mut context = context_lock.write();
 
@@ -771,9 +766,6 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
                         context.image.push(memory.to_shared());
                     }
 
-                    let files = Arc::new(Mutex::new(context.files.lock().clone()));
-                    context.files = files.clone();
-
                     context.actions = Arc::new(Mutex::new(vec![(
                         SigAction {
                             sa_handler: unsafe { mem::transmute(SIG_DFL) },
@@ -785,66 +777,27 @@ pub fn exec(path: &[u8], arg_ptrs: &[[usize; 2]]) -> Result<usize> {
 
                     let vfork = context.vfork;
                     context.vfork = false;
+
+                    let files = Arc::clone(&context.files);
+
                     (vfork, context.ppid, files)
                 };
 
-                // Duplicate current files, close previous
-                for (fd, mut file_option) in files.lock().iter_mut().enumerate() {
-                    let new_file_option = if let Some(ref file) = *file_option {
-                        // Duplicate
-                        let result = {
-                            if file.flags & O_CLOEXEC == O_CLOEXEC {
-                                Err(Error::new(EBADF))
-                            } else {
-                                let scheme_option = {
-                                    let schemes = scheme::schemes();
-                                    schemes.get(file.scheme).map(|scheme| scheme.clone())
-                                };
-                                if let Some(scheme) = scheme_option {
-                                    scheme.dup(file.number, b"")
-                                } else {
-                                    Err(Error::new(EBADF))
-                                }
-                            }
-                        };
-
-                        // Close
-                        {
-                            if let Some(event_id) = file.event {
-                                context::event::unregister(FileHandle::from(fd), file.scheme, event_id);
-                            }
-
-                            let scheme_option = {
-                                let schemes = scheme::schemes();
-                                schemes.get(file.scheme).map(|scheme| scheme.clone())
-                            };
-                            if let Some(scheme) = scheme_option {
-                                let _ = scheme.close(file.number);
-                            }
+                for (fd, file_option) in files.lock().iter_mut().enumerate() {
+                    let mut cloexec = false;
+                    if let Some(ref file) = *file_option {
+                        if file.cloexec {
+                            cloexec = true;
                         }
+                    }
 
-                        // Return new descriptor
-                        match result {
-                            Ok(new_number) => {
-                                Some(context::file::File {
-                                    scheme: file.scheme,
-                                    number: new_number,
-                                    flags: file.flags,
-                                    event: None,
-                                })
-                            },
-                            Err(_err) => {
-                                None
-                            }
-                        }
-                    } else {
-                        None
-                    };
-
-                    *file_option = new_file_option;
+                    if cloexec {
+                        let _ = file_option.take().unwrap().close(FileHandle::from(fd));
+                    }
                 }
 
                 if vfork {
+                    let contexts = context::contexts();
                     if let Some(context_lock) = contexts.get(ppid) {
                         let mut context = context_lock.write();
                         if ! context.unblock() {
@@ -890,17 +843,7 @@ pub fn exit(status: usize) -> ! {
         /// Files must be closed while context is valid so that messages can be passed
         for (fd, file_option) in close_files.drain(..).enumerate() {
             if let Some(file) = file_option {
-                if let Some(event_id) = file.event {
-                    context::event::unregister(FileHandle::from(fd), file.scheme, event_id);
-                }
-
-                let scheme_option = {
-                    let schemes = scheme::schemes();
-                    schemes.get(file.scheme).map(|scheme| scheme.clone())
-                };
-                if let Some(scheme) = scheme_option {
-                    let _ = scheme.close(file.number);
-                }
+                let _ = file.close(FileHandle::from(fd));
             }
         }
 
@@ -960,13 +903,18 @@ pub fn exit(status: usize) -> ! {
         }
 
         if pid == ContextId::from(1) {
-            println!("Main kernel thread exited with status {:X}, calling kstop", status);
+            println!("Main kernel thread exited with status {:X}", status);
 
             extern {
+                fn kreset() -> !;
                 fn kstop() -> !;
             }
 
-            unsafe { kstop(); }
+            if status == SIGTERM {
+                unsafe { kreset(); }
+            } else {
+                unsafe { kstop(); }
+            }
         }
     }
 
@@ -982,6 +930,17 @@ pub fn getpid() -> Result<ContextId> {
     Ok(context.id)
 }
 
+pub fn getpgid(pid: ContextId) -> Result<ContextId> {
+    let contexts = context::contexts();
+    let context_lock = if pid.into() == 0 {
+        contexts.current().ok_or(Error::new(ESRCH))?
+    } else {
+        contexts.get(pid).ok_or(Error::new(ESRCH))?
+    };
+    let context = context_lock.read();
+    Ok(context.pgid)
+}
+
 pub fn getppid() -> Result<ContextId> {
     let contexts = context::contexts();
     let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
@@ -990,28 +949,119 @@ pub fn getppid() -> Result<ContextId> {
 }
 
 pub fn kill(pid: ContextId, sig: usize) -> Result<usize> {
-    let (ruid, euid) = {
+    println!("Kill {} {:X}", pid.into() as isize, sig);
+
+    let (ruid, euid, current_pgid) = {
         let contexts = context::contexts();
         let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
         let context = context_lock.read();
-        (context.ruid, context.euid)
+        (context.ruid, context.euid, context.pgid)
     };
 
     if sig > 0 && sig <= 0x7F {
         let contexts = context::contexts();
-        let context_lock = contexts.get(pid).ok_or(Error::new(ESRCH))?;
-        let mut context = context_lock.write();
-        if euid == 0
-        || euid == context.ruid
-        || ruid == context.ruid
-        {
-            context.pending.push_back(sig as u8);
-            Ok(0)
+
+        let mut found = 0;
+        let mut sent = 0;
+
+        let send = |context: &mut context::Context| -> bool {
+            if euid == 0
+            || euid == context.ruid
+            || ruid == context.ruid
+            {
+                println!("Send {:X} to {}", sig, context.id.into());
+                context.pending.push_back(sig as u8);
+                true
+            } else {
+                false
+            }
+        };
+
+        if pid.into() as isize > 0 {
+            // Send to a single process
+            if let Some(context_lock) = contexts.get(pid) {
+                let mut context = context_lock.write();
+
+                found += 1;
+                if send(&mut context) {
+                    sent += 1;
+                }
+            }
+        } else if pid.into() as isize == -1 {
+            // Send to every process with permission, except for init
+            for (_id, context_lock) in contexts.iter() {
+                let mut context = context_lock.write();
+
+                if context.id.into() > 2 {
+                    found += 1;
+
+                    if send(&mut context) {
+                        sent += 1;
+                    }
+                }
+            }
         } else {
+            let pgid = if pid.into() == 0 {
+                current_pgid
+            } else {
+                ContextId::from(-(pid.into() as isize) as usize)
+            };
+
+            println!("pgid {}", pgid.into());
+
+            // Send to every process in the process group whose ID
+            for (_id, context_lock) in contexts.iter() {
+                let mut context = context_lock.write();
+
+                if context.pgid == pgid {
+                    found += 1;
+
+                    if send(&mut context) {
+                        sent += 1;
+                    }
+                }
+            }
+        }
+
+        println!("Found {}, sent to {}", found, sent);
+
+        if found == 0 {
+            Err(Error::new(ESRCH))
+        } else if sent == 0 {
             Err(Error::new(EPERM))
+        } else {
+            Ok(0)
         }
     } else {
         Err(Error::new(EINVAL))
+    }
+}
+
+pub fn setpgid(pid: ContextId, pgid: ContextId) -> Result<usize> {
+    let contexts = context::contexts();
+
+    let current_pid = {
+        let context_lock = contexts.current().ok_or(Error::new(ESRCH))?;
+        let context = context_lock.read();
+        context.id
+    };
+
+    let context_lock = if pid.into() == 0 {
+        contexts.current().ok_or(Error::new(ESRCH))?
+    } else {
+        contexts.get(pid).ok_or(Error::new(ESRCH))?
+    };
+
+    let mut context = context_lock.write();
+    if context.id == current_pid || context.ppid == current_pid {
+        if pgid.into() == 0 {
+            context.pgid = context.id;
+        } else {
+            context.pgid = pgid;
+        }
+        Ok(0)
+    } else {
+        Err(Error::new(ESRCH))
     }
 }
 
