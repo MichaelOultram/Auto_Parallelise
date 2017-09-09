@@ -1,5 +1,6 @@
 use imgui::*;
 
+use extra_widgets::UiExtras;
 use ModelState;
 use router::*;
 
@@ -46,8 +47,9 @@ impl MachineUsageWindow {
                 self.update_machine_usage(model);
 
                 let prev_min = self.scale_min;
-                ui.slider_int(im_str!("Scale min"), &mut self.scale_min, 0, self.scale_max_max - 1).build();
-                ui.slider_int(im_str!("Scale max"), &mut self.scale_max, 1, self.scale_max_max).build();
+                //ui.slider_int(im_str!("Scale min"), &mut self.scale_min, 0, self.scale_max_max - 1).build();
+                //ui.slider_int(im_str!("Scale max"), &mut self.scale_max, 1, self.scale_max_max).build();
+                ui.range_slider_i32(im_str!("Scale"), &mut self.scale_min, &mut self.scale_max, 0, self.scale_max_max);
                 ui.separator();
 
                 // Push the other slide so start is never before end

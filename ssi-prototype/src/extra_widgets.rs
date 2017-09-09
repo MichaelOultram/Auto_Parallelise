@@ -34,7 +34,7 @@ impl CustomRenderWindow {
 
                 ui.text(im_str!("mouse_coord: ({}, {})", mouse_coord.x, mouse_coord.y));
 
-                ui.range_slider(&"Slider".to_string(), &mut self.min, &mut self.max, 0.0, 1.0);
+                ui.range_slider_f32(&"Slider".to_string(), &mut self.min, &mut self.max, 0.0, 1.0);
                 ui.text(im_str!("END"));
 
             });
@@ -43,11 +43,12 @@ impl CustomRenderWindow {
 }
 
 pub trait UiExtras<'ui> {
-    fn range_slider<'p>(&self, label: &str, min: &mut f32, max: &mut f32, min_limit: f32, max_limit: f32);
+    fn range_slider_f32<'p>(&self, label: &str, min: &mut f32, max: &mut f32, min_limit: f32, max_limit: f32);
+    fn range_slider_i32<'p>(&self, label: &str, min: &mut i32, max: &mut i32, min_limit: i32, max_limit: i32);
 }
 
 impl<'ui> UiExtras<'ui> for Ui<'ui> {
-    fn range_slider<'p>(&self, label: &str, min_value: &mut f32, max_value: &mut f32, min_limit: f32, max_limit: f32) {
+    fn range_slider_f32<'p>(&self, label: &str, min_value: &mut f32, max_value: &mut f32, min_limit: f32, max_limit: f32) {
         let store = unsafe {
             igGetStateStorage()
         };
@@ -137,11 +138,48 @@ impl<'ui> UiExtras<'ui> for Ui<'ui> {
                 section_down = 0; // Nothing
             }
             click_pos = mouse.x;
-        } else if !mouse_down  {
+        } else if !mouse_down {
             section_down = -1; // Wait for click
             click_pos = 0.0;
         }
         println!("section_down: {}, click_pos: {}", section_down, click_pos);
+
+        // Caculate new percentage
+        let bar_length = bar_end.x - bar_start.x - 2.0 * slider_margin;
+        let mut percentage = (mouse.x - bar_start.x - slider_margin) / bar_length;
+        if percentage < 0.0 {
+            percentage = 0.0;
+        } else if percentage > 1.0 {
+            percentage = 1.0;
+        }
+
+
+        // Move the slider to the new percentage
+        match section_down {
+            // Left
+            1 => {
+                *min_value = min_limit + percentage * limit_range;
+                if max_value < min_value {
+                    *min_value = *max_value;
+                }
+            },
+
+            // Middle
+            2 => {},
+
+            // Right
+            3 => {
+                *max_value = min_limit + percentage * limit_range;
+                if max_value < min_value {
+                    *max_value = *min_value;
+                }
+            },
+
+            // Nothing
+            _ => {},
+        }
+
+
         unsafe {
             // Save section_down, click_pos
             ImGuiStorage_SetInt(store, section_id, section_down);
@@ -152,6 +190,16 @@ impl<'ui> UiExtras<'ui> for Ui<'ui> {
             ImDrawList_AddRectFilled(draw_list, left_slider, right_slider, col32_frg_gray, 5.0, 15); // 5.0 and 15 are for rounding all the corners
             igInvisibleButton(&0, slider_size);
         }
+    }
+
+    fn range_slider_i32<'p>(&self, label: &str, min_value: &mut i32, max_value: &mut i32, min_limit: i32, max_limit: i32) {
+        let mut min_value_f32 = *min_value as f32;
+        let mut max_value_f32 = *max_value as f32;
+        let min_limit_f32 = min_limit as f32;
+        let max_limit_f32 = max_limit as f32;
+        self.range_slider_f32(label, &mut min_value_f32, &mut max_value_f32, min_limit_f32, max_limit_f32);
+        *min_value = min_value_f32 as i32;
+        *max_value = max_value_f32 as i32;
     }
 }
 
