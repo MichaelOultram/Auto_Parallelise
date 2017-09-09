@@ -23,8 +23,8 @@ use machine_usage_window::*;
 mod timescale_window;
 use timescale_window::*;
 
-mod custom_render_window;
-use custom_render_window::*;
+mod extra_widgets;
+use extra_widgets::*;
 
 use ssi_model::*;
 use router::*;
