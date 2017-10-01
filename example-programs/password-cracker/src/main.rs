@@ -11,7 +11,7 @@ fn load_dictionary() -> Vec<String> {
     let mut dict = vec![];
 
     // Put each line of dictionary.txt into the vector
-    let f = File::open("dictionary.txt").unwrap();
+    let f = File::open("passwords.txt").unwrap();
     let file = BufReader::new(&f);
     for line in file.lines(){
         let l = line.unwrap();
@@ -40,7 +40,7 @@ fn main() {
     let now = Instant::now();
 
     let dictionary = load_dictionary();
-    let hash_password = format!("10c2d630409d5a4b8132f21478f40a030b8aefb29ab1a541da6d884a0286a6dc");
+    let hash_password = format!("61bdb3487ed81633ee4d7875745028739a92feb91f27d704fdfcfa8be5f0b3ee");
     let password = crack_password_single(&dictionary, hash_password);
     match password {
         Some(word) => println!("Found password: {}", word),
