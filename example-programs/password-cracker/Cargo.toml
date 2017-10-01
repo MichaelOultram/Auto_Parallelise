@@ -1,0 +1,8 @@
+[package]
+name = "password-cracker"
+version = "0.1.0"
+authors = ["Michael Oultram <MichaelOultram@users.noreply.github.com>"]
+
+[dependencies]
+rust-crypto = "0.2.36"
+time = "*"
