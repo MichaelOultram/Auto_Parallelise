@@ -1,5 +1,21 @@
 #![feature(i128_type)]
+#![feature(use_external_macros)]
+
+#![feature(plugin)]
+#![plugin(compiler_plugins)]
+
 use std::time::Instant;
+
+fn main() {
+    let mut now = Instant::now();
+
+    let fibs = fibinacci_array(rn!(X) as usize);
+    println!("{:?}", fibs);
+
+    let elapsed = now.elapsed();
+    let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
+    println!("Seconds: {}", sec);
+}
 
 fn fibinacci_array(length: usize) -> Vec<u128> {
     let mut output = vec![1,1];
@@ -14,13 +30,11 @@ fn fibinacci_array(length: usize) -> Vec<u128> {
     output
 }
 
-fn main() {
-    let now = Instant::now();
+#[para]
+fn test_function() -> u32 {
+    test_function2()
+}
 
-    let fibs = fibinacci_array(1000);
-    println!("{:?}", fibs);
-
-    let elapsed = now.elapsed();
-    let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-    println!("Seconds: {}", sec);
+fn test_function2() -> u32 {
+    2
 }
