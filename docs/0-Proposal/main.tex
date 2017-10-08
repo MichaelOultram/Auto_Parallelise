@@ -15,19 +15,24 @@
 
 \section{Project Description}
 % What is the problem the project will address?
-Processors have been gaining more and more cores. Parallelising programs to take advantage of the additional cores is difficult/effort.
+Processors have been gaining more and more cores. Parallelising programs to take advantage of the additional cores has some difficulty and require some effort. It would be much nicer if the programmer could write code as normal, and the parts that can be are automatically converted into parallel code.
 
 % How am I going to solve this problem?
+The only reason this project seems feasible is because of rust.
 The rust language has a unique way of managing memory that can guarantee thread safety. I'm going to use and abuse this. I am going to write a compiler plugin which will analyse the abstract syntax tree of another rust program. Any parts of the abstract syntax tree that could be run in parallel would be run in it's own thread.
 
-% How am I going to evaluate my solution to the problem? (maybe)
-I can evaluate the effectiveness of my solution by measuring the speedup of parallelising the program vs the original serial code.
+% How am I going to evaluate my solution to the problem?
+I can evaluate the effectiveness of my solution by measuring the speedup of parallelising the program vs the original serial code. I'll look at existing programs written in rust to see any real world impact.
 
 \section{Project Plan}
 % Timetable of the different phases of development
 % When are these phases going to be completed
+\todo{Add estimated dates}\\
+\todo{Include non-coding sections}
 
+For the coding part of the project, the main phases are:
 \begin{itemize}
+	\item Create two plugins, a linter and a syntax extension
 	\item Get the linter plugin to
 	\begin{itemize}
 		\item Analyse the programs statements to see what variables each statement depends on and what variables the statement modifies (if any)
@@ -36,42 +41,57 @@ I can evaluate the effectiveness of my solution by measuring the speedup of para
 		\item Estimate the speed of each statement for the dependency tree
 		\item Record the areas that could be changed into a file
 	\end{itemize}
-	\item Get the Syntax Extension plugin to
+	\item Get the syntax extension plugin to
 	\begin{itemize}
 		\item Read the file the Linter plugin creates
 		\item First try one statement in parallel to test it works
 		\item Then try to run everything in parallel to test it works
 		\item Then only run parts in parallel if it would be faster to run in parallel (maybe compile to if $n < 1000$ then serial else parallel)
 	\end{itemize}
-	\item Extension: Look for if statements with a slow condition. Run each branch in a separate thread on cloned data. When the condition is calculated, delete the incorrect branch.
-	\item Extension's Extension (that'll never happen): Look for statements that could be run on the GPU
 
 \end{itemize}
 
 \section{Project Extensions}
 % Or show how the project can be reduced if it takes too long
-Loops can be parallelised if each loop is independent. An If-Else could be parallelised by running both branches in parallel whilst calculating the condition.
+If I'm ahead of schedule with the coding section of this project, I could look into parallelising `if' statements which have a slow condition. Each branch of the `if' would be run in a separate thread using cloned data. When the condition is finally calculated the incorrect branches would need to be deleted. This kind of parallelisation is different from the project plan as some threads are ``thrown away''.
 
-Possible extension to use CUDA? (but very unlikely)
+Another possible extension upon the previous extension is to utilise the GPU using CUDA in cases where a large number of threads are doing the exact same task on different data. I feel it is very unlikely that I would have time for this extension, and I'm unsure of how much real world code would be written in such a way that it could be automatically run on the GPU efficiently.
 
 \section{Resources Required}
 % List hardware and software required for the project
+\begin{itemize}
+	\item A computer to program on
+	\item Source code of some rust programs to parallelise
+\end{itemize}
 
 \section{Feasibility Study}
-% Check whether required hardware and software is available in the school
+Ideas come from functional languages (like Haskell), compiler optimisation using multi-threading.
 
 \textbf{Project Risks:}
 \begin{itemize}
 	\item Compiler code too complicated to use
+	\item Size of task is too large
+	\item No idea how to analyse the speed to statements at compile time yet
+	\item ``Independant tasks can be run in parallel'' is true in my head, but maybe not in practice
+	\item Rust may not give me all the guarantees that I think it would give me
+
+\end{itemize}
+
+\textbf{Other Approaches (and why they are bad):}
+\begin{itemize}
+	\item Edit the compiler code directly instead of using a plugin
+	\item Use a different language than rust
+	\item Make the programmer annotate which parts of the code are parallelisable (like OpenMP)
 	\item
 
 \end{itemize}
 
-\textbf{Required Hardware/Software:}
+\textbf{Downsides to this approach:}\\
+The end user programmer would need to:
 \begin{itemize}
-	\item A computer to program on
-	\item Source code of some rust programs
-
+	\item Add my crate to the Cargo.toml file and import it in main.rs or lib.rs
+	\item Compile their program twice (first compile is for analysing, the second is for applying the changes)
+	\item Annotate each function to allow the plugin to make changes to the code
 \end{itemize}
 
 \end{document}
