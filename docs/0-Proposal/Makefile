@@ -8,7 +8,7 @@ LATEXMKOPT=-pdf
 CONTINUOUS=-pvc
 
 MAIN=main
-SOURCES=$(MAIN).tex Makefile $(shell find chapters/* -name "*.tex")
+SOURCES=$(MAIN).tex Makefile
 #FIGURES := $(shell find figures/* images/* -type f)
 
 all:    $(MAIN).pdf

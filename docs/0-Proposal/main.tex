@@ -1,0 +1,77 @@
+%!TeX spellcheck = en-GB
+\documentclass[12pt, a4paper]{article}
+\usepackage{mystyle}
+
+\title{
+	\vspace{-4ex}
+	\LARGE\textbf{Automatic Parallelisation of Rust Programs at Compile Time} \\
+	\large\textbf{Project Proposal}
+	\vspace{-9ex}
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Project Description}
+% What is the problem the project will address?
+Processors have been gaining more and more cores. Parallelising programs to take advantage of the additional cores is difficult/effort.
+
+% How am I going to solve this problem?
+The rust language has a unique way of managing memory that can guarantee thread safety. I'm going to use and abuse this. I am going to write a compiler plugin which will analyse the abstract syntax tree of another rust program. Any parts of the abstract syntax tree that could be run in parallel would be run in it's own thread.
+
+% How am I going to evaluate my solution to the problem? (maybe)
+I can evaluate the effectiveness of my solution by measuring the speedup of parallelising the program vs the original serial code.
+
+\section{Project Plan}
+% Timetable of the different phases of development
+% When are these phases going to be completed
+
+\begin{itemize}
+	\item Get the linter plugin to
+	\begin{itemize}
+		\item Analyse the programs statements to see what variables each statement depends on and what variables the statement modifies (if any)
+		\item Produce a dependency tree for the entire program based on this analysis
+		\item Look for areas in the tree which do not depend on one another, these areas could be run in parallel
+		\item Estimate the speed of each statement for the dependency tree
+		\item Record the areas that could be changed into a file
+	\end{itemize}
+	\item Get the Syntax Extension plugin to
+	\begin{itemize}
+		\item Read the file the Linter plugin creates
+		\item First try one statement in parallel to test it works
+		\item Then try to run everything in parallel to test it works
+		\item Then only run parts in parallel if it would be faster to run in parallel (maybe compile to if $n < 1000$ then serial else parallel)
+	\end{itemize}
+	\item Extension: Look for if statements with a slow condition. Run each branch in a separate thread on cloned data. When the condition is calculated, delete the incorrect branch.
+	\item Extension's Extension (that'll never happen): Look for statements that could be run on the GPU
+
+\end{itemize}
+
+\section{Project Extensions}
+% Or show how the project can be reduced if it takes too long
+Loops can be parallelised if each loop is independent. An If-Else could be parallelised by running both branches in parallel whilst calculating the condition.
+
+Possible extension to use CUDA? (but very unlikely)
+
+\section{Resources Required}
+% List hardware and software required for the project
+
+\section{Feasibility Study}
+% Check whether required hardware and software is available in the school
+
+\textbf{Project Risks:}
+\begin{itemize}
+	\item Compiler code too complicated to use
+	\item
+
+\end{itemize}
+
+\textbf{Required Hardware/Software:}
+\begin{itemize}
+	\item A computer to program on
+	\item Source code of some rust programs
+
+\end{itemize}
+
+\end{document}
