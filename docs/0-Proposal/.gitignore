@@ -3,8 +3,10 @@
 *.fls
 *.end
 *.log
-*~ 
+*~
 *.tmp
+*.bcf
+*.run.xml
 
 # Latex gitignore
 # Stolen from: https://gist.github.com/kogakure/149016
