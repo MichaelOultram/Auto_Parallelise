@@ -1,15 +1,15 @@
 % Encoding: UTF-8
 
 @Article{geer2005chip,
-  author   = {Geer, David},
+  author    = {Geer, David},
   title     = {Chip makers turn to multicore processors},
   journal   = {Computer},
   year      = {2005},
   volume    = {38},
   number    = {5},
   pages     = {11--13},
-  abstract  = {Computer performance has been driven largely by decreasing the size of chips while increasing the number of transistors they contain. In accordance with Moore's law, this has caused chip speeds to rise and prices to drop. This ongoing trend has driven much of the computing industry for years. Manufacturers are building chips with multiple cooler-running, more energy-efficient processing cores instead of one increasingly powerful core. The multicore chips don't necessarily run as fast as the highest performing single-core models, but they improve overall performance by handling more work in parallel. Multicores are a way to extend Moore's law so that the user gets more performance out of a piece of silicon. Chip makers AMD, IBM, Intel, and Sun are now introducing multicore chips for servers, desktops, and laptops.},
   publisher = {IEEE},
+  abstract  = {Computer performance has been driven largely by decreasing the size of chips while increasing the number of transistors they contain. In accordance with Moore's law, this has caused chip speeds to rise and prices to drop. This ongoing trend has driven much of the computing industry for years. Manufacturers are building chips with multiple cooler-running, more energy-efficient processing cores instead of one increasingly powerful core. The multicore chips don't necessarily run as fast as the highest performing single-core models, but they improve overall performance by handling more work in parallel. Multicores are a way to extend Moore's law so that the user gets more performance out of a piece of silicon. Chip makers AMD, IBM, Intel, and Sun are now introducing multicore chips for servers, desktops, and laptops.},
 }
 
 @Article{kish2002end,
@@ -20,8 +20,55 @@
   volume    = {305},
   number    = {3},
   pages     = {144--149},
-  abstract  = {The exponential growth of memory size and clock frequency in computers has a great impact on everyday life. The growth is empirically described by Moore’s law of miniaturization. Physical limitations of this growth would have a serious impact on technology and economy. A thermodynamical effect, the increasing thermal noise voltage (Johnson–Nyquist noise) on decreasing characteristic capacitances, together with the constrain of using lower supply voltages to keep power dissipation manageable on the contrary of increasing clock frequency, has the potential to break abruptly Moore’s law within 6–8 years, or earlier.},
   publisher = {Elsevier},
+  abstract  = {The exponential growth of memory size and clock frequency in computers has a great impact on everyday life. The growth is empirically described by Moore’s law of miniaturization. Physical limitations of this growth would have a serious impact on technology and economy. A thermodynamical effect, the increasing thermal noise voltage (Johnson–Nyquist noise) on decreasing characteristic capacitances, together with the constrain of using lower supply voltages to keep power dissipation manageable on the contrary of increasing clock frequency, has the potential to break abruptly Moore’s law within 6–8 years, or earlier.},
+}
+
+@Online{rustlang,
+  title  = {The Rust Programming Language},
+  urldate = {2017-10-09},
+  url    = {https://www.rust-lang.org/en-US/}
+}
+
+@Online{stackoverflowsurvey,
+  author  = {StackOverflow},
+  title   = {Stack Overflow Developer Survey 2017},
+  urldate = {2017-10-09},
+  url     = {https://insights.stackoverflow.com/survey/2017}
+}
+
+@Article{d1998fortran,
+  title     = {The fortran parallel transformer and its programming environment},
+  author    = {D'Hollander, Erik H and Zhang, Fubo and Wang, Qi},
+  journal   = {Information sciences},
+  volume    = {106},
+  number    = {3-4},
+  pages     = {293--317},
+  year      = {1998},
+  publisher = {Elsevier},
+  abstract  = {The Fortran Parallel Transformer (FPT) is a parallelization tool for Fortran-77 programs. It is used for the automatic parallelization of loops, program transformations, dependence analysis, performance tuning and code generation for various platforms. FPT is able to deal with GOTO's by restructuring ill-structured code using hammock graph transformations. In this way more parallelism becomes detectable. The X-window based Programming Environment, PEFPT, extends FPT with interactive dependence analysis, the iteration space graph, ISG, and guided loop optimization. FPT contains a PVM (Parallel Virtual Machine) code generator which converts the parallel loops into PVM master- and slave-code for a network of workstations. This includes job scheduling, synchronization and optimized data communication. The productivity gained is about a factor of 10 in programming time and a significant speedup of the execution.},
+}
+
+@inproceedings{baskaran2010automatic,
+  title        = {Automatic C-to-CUDA code generation for affine programs},
+  author       = {Baskaran, Muthu and Ramanujam, Jj and Sadayappan, P},
+  booktitle    = {Compiler Construction},
+  pages        = {244--263},
+  year         = {2010},
+  organization = {Springer},
+  abstract     = {Graphics Processing Units (GPUs) offer tremendous computational power. CUDA (Compute Unified Device Architecture) provides a multi-threaded parallel programming model, facilitating high performance implementations of general-purpose computations. However, the explicitly managed memory hierarchy and multi-level parallel view make manual development of high-performance CUDA code rather complicated. Hence the automatic transformation of sequential input programs into efficient parallel CUDA programs is of considerable interest. This paper describes an automatic code transformation system that generates parallel CUDA code from input sequential C code, for regular (affine) programs. Using and adapting publicly available tools that have made polyhedral compiler optimization practically effective, we develop a C-to-CUDA transformation system that generates two-level parallel CUDA code that is optimized for efficient data access. The performance of automatically generated code is compared with manually optimized CUDA code for a number of benchmarks. The performance of the automatically generated CUDA code is quite close to hand-optimized CUDA code and considerably better than the benchmarks’ performance on a multicore CPU.},
+}
+
+@article{dagum1998openmp,
+  title     = {OpenMP: an industry standard API for shared-memory programming},
+  author    = {Dagum, Leonardo and Menon, Ramesh},
+  journal   = {IEEE computational science and engineering},
+  volume    = {5},
+  number    = {1},
+  pages     = {46--55},
+  year      = {1998},
+  publisher = {IEEE},
+  abstract  = {At its most elemental level, OpenMP is a set of compiler directives and callable runtime library routines that extend Fortran (and separately, C and C++ to express shared memory parallelism. It leaves the base language unspecified, and vendors can implement OpenMP in any Fortran compiler. Naturally, to support pointers and allocatables, Fortran 90 and Fortran 95 require the OpenMP implementation to include additional semantics over Fortran 77. OpenMP leverages many of the X3H5 concepts while extending them to support coarse grain parallelism. The standard also includes a callable runtime library with accompanying environment variables.},
 }
 
 @Comment{jabref-meta: databaseType:bibtex;}

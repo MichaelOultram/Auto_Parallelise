@@ -13,72 +13,73 @@
 
 \begin{document}
 \maketitle
+\todo{Write in proper sentences more objectively}
 
 \section{Problem}
 % What is the problem the project will address?
 % Needs more than anecdotal notes!
-\textcite{kish2002end} claims Moore's Law is dying/dead. Processors have been gaining more and more cores \parencite{geer2005chip}. Parallelising programs to take advantage of the additional cores has some difficulty and often requires the programmer to make significant changes to the source code. It would be much nicer if the programmer could write code as normal, and the parts that can be run in parallel are automatically converted into parallel code.
+\textcite{kish2002end} claims Moore's Law is dying/dead and processors have been gaining more and more cores \parencite{geer2005chip}. Parallelising programs to take advantage of the additional cores has some difficulty and often requires the programmer to make significant changes to the source code. It would be much nicer if the programmer could write normal sequential code, and the parts that can be run in parallel are automatically converted into parallel code. Also existing sequential code could take advantage of multithreading without rewriting.
 
 \section{Approach}
 % How am I going to solve this problem?
-The only reason this project seems feasible is because of rust.
-The rust language has a unique way of managing memory that can guarantee thread safety. I'm going to use and abuse this. I am going to write a compiler plugin which will analyse the abstract syntax tree of another rust program. Any parts of the abstract syntax tree that could be run in parallel would be run in it's own thread.
+People have automated parallelisation of sequential FORTRAN and C code in the past \parencite{d1998fortran,baskaran2010automatic}. Instead of trying to parallelise one of these languages, I will try to automatically parallelise sequential rust programs, as the rust language has guaranteed memory safety and threads without data races \parencite{rustlang}.
 
-% How am I going to evaluate my solution to the problem?
-I can evaluate the effectiveness of my solution by measuring the speedup of parallelising the program vs the original serial code. I'll look at existing programs written in rust to see any real world impact.
+I am going to write a compiler plugin which will analyse the abstract syntax tree of another rust program. Any parts of the abstract syntax tree that could be run in parallel would be run in it's own thread instead.
 
 \subsection{Requirements}
 % List hardware and software required for the project
 \begin{itemize}
 	\item A computer to program on
 	\item Source code of some rust programs to parallelise
+	\item Rust compiler
+	\item Atom
 \end{itemize}
 
 \subsection{Timeline}
 % Timetable of the different phases of development
 % When are these phases going to be completed
-\todo{Add estimated dates}\\
-\todo{Include non-coding sections}
+\todo{Add estimated dates}
 
-For the coding part of the project, the main phases are:
+Below is an estimated timeline of the project.
+
 \begin{itemize}
+	\item Write this proposal
+	\item Submit the ethical review
 	\item Create two plugins, a linter and a syntax extension
-	\item Get the linter plugin to
 	\begin{itemize}
-		\item Analyse the programs statements to see what variables each statement depends on and what variables the statement modifies (if any)
-		\item Produce a dependency tree for the entire program based on this analysis
-		\item Look for areas in the tree which do not depend on one another, these areas could be run in parallel
-		\item Estimate the speed of each statement for the dependency tree
-		\item Record the areas that could be changed into a file
+		\item Get the linter plugin to:
+		\begin{itemize}
+			\item Analyse the programs statements to see what variables each statement depends on and what variables the statement modifies (if any)
+			\item Produce a dependency tree for the entire program based on this analysis
+			\item Look for areas in the tree which do not depend on one another, these areas could be run in parallel
+			\item Estimate the speed of each statement for the dependency tree
+			\item Record the areas that could be changed into a file
+		\end{itemize}
+		\item Get the syntax extension plugin to:
+		\begin{itemize}
+			\item Read the file the Linter plugin creates
+			\item First try one statement in parallel to test it works
+			\item Then try to run everything in parallel to test it works
+			\item Then only run parts in parallel if it would be faster to run in parallel (maybe compile to if $n < 1000$ then serial else parallel)
+		\end{itemize}
 	\end{itemize}
-	\item Get the syntax extension plugin to
-	\begin{itemize}
-		\item Read the file the Linter plugin creates
-		\item First try one statement in parallel to test it works
-		\item Then try to run everything in parallel to test it works
-		\item Then only run parts in parallel if it would be faster to run in parallel (maybe compile to if $n < 1000$ then serial else parallel)
-	\end{itemize}
-
+	\item Do some testing
+	\item Write a report
 \end{itemize}
 
-\subsection{Project Extensions}
+\subsection{Possible Extensions}
 % Or show how the project can be reduced if it takes too long
 If I'm ahead of schedule with the coding section of this project, I could look into parallelising `if' statements which have a slow condition. Each branch of the `if' would be run in a separate thread using cloned data. When the condition is finally calculated the incorrect branches would need to be deleted. This kind of parallelisation is different from the project plan as some threads are ``thrown away''.
 
 Another possible extension upon the previous extension is to utilise the GPU using CUDA in cases where a large number of threads are doing the exact same task on different data. I feel it is very unlikely that I would have time for this extension, and I'm unsure of how much real world code would be written in such a way that it could be automatically run on the GPU efficiently.
 
-Ideas come from functional languages (like Haskell), compiler optimisation using multi-threading.
-
 \section{Evaluation}
-% Why is the chosen solution the best?
-% What are the other approaches (and why they are bad)?
-% How will I know if the project is a success?
-\begin{itemize}
-	\item Edit the compiler code directly instead of using a plugin
-	\item Use a different language than rust
-	\item Make the programmer annotate which parts of the code are parallelisable (like OpenMP)
-	\item Don't do anything and just make the programmer worry about parallelisation
-\end{itemize}
+\subsection{Disadvantages to the Chosen Approach}
+While I think the approach I have chosen is the best option to solve the problem, there are a few downsides to this proposed approach.
+
+To take an existing sequential rust program and compile it requires a few steps. The compiler plugin crate would need to be imported, and every function would need to be annotated so that the plugin has edit access to the abstract syntax tree for that function.
+
+Due to the limitation of rust compiler plugins, the program would need to be compiled twice. The first compile would allow the entire syntax tree to be analysed for parallelisable sections. The second compile would edit the syntax tree to move the parallelisable sections into separate threads.
 
 \textbf{Project Risks:}
 \begin{itemize}
@@ -87,16 +88,31 @@ Ideas come from functional languages (like Haskell), compiler optimisation using
 	\item No idea how to analyse the speed to statements at compile time yet
 	\item ``Independent tasks can be run in parallel'' is true in my head, but maybe not in practice
 	\item Rust may not give me all the guarantees that I think it would give me
-
 \end{itemize}
 
-\textbf{Downsides to this approach:}\\
-The end user programmer would need to:
-\begin{itemize}
-	\item Add my crate to the Cargo.toml file and import it in main.rs or lib.rs
-	\item Compile their program twice (first compile is for analysing, the second is for applying the changes)
-	\item Annotate each function to allow the plugin to make changes to the code
-\end{itemize}
+
+% Why is the chosen solution the best?
+% What are the other approaches (and why they are bad)?
+\subsection{Other Approaches}
+There are other approaches to the problem that I am trying to solve (some of which have already been implemented). I will explain these other approaches and why I didn't choose them.
+
+\subsubsection{Make a custom rust compiler}
+One of the downsides of the chosen approach is that the program has to be compiled twice. I may be able to bypass this limitation by making a fork of the rust compiler instead of using compiler plugins. It would then be possible to examine the entire abstract syntax tree and then edit it afterwards. However, this approach would add significant complexity to the project as the rust compiler code is very complex.
+
+\subsubsection{Use a different language from rust}
+There are many programs out there, written in many different languages. So why rust? Rust is not even in the top 25 of most popular programming languages according to \textcite{stackoverflowsurvey}. Using a more popular language would make this tool more useful for more programs. Rust isn't unpopular as it is the most loved language and the 10th language on the most want to lean list \parencite{stackoverflowsurvey}. The main reason for using rust is the guaranteed memory safety and threads without race conditions which would help significantly with the task.
+
+\subsubsection{Manually annotate the parts of the program that are parallelisable}
+\parencite{dagum1998openmp}
+
+\subsubsection{Just run the sequential code}
+Running code in multiple threads has some overhead.
+
+\subsection{Measuring Project Success}
+% How will I know if the project is a success?
+% How am I going to evaluate my solution to the problem?
+
+I can evaluate the successfulness of my solution by measuring the speedup of parallelising the program vs the original serial code. I'll look at existing programs written in rust to see any real world impact.
 
 \section{References}
 \printbibliography[heading=none]
