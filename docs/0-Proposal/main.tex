@@ -17,13 +17,17 @@
 \section{Problem}
 % What is the problem the project will address?
 % Needs more than anecdotal notes!
-\textcite{kish2002end} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{geer2005chip}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. Is it possible to automate these changes to convert sequential code into parallelised code? Previous attempts at solving this problem include \textcite{d1998fortran} where they automated parallelisation of sequential FORTRAN code and \textcite{baskaran2010automatic} where they automated conversion of sequential C into CUDA code. Both of these approaches use unsafe programming languages significant complexity to their solutions. Instead, can this problem be solved more easily with a safe programming language like rust \parencite{rustlang}?
+\textcite{kish2002end} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{geer2005chip}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. Is it possible to automate these changes to convert sequential code into parallelised code? Previous attempts at solving this problem include \textcite{d1998fortran} where they automated parallelisation of sequential FORTRAN code and \textcite{baskaran2010automatic} where they automated conversion of sequential C into CUDA code. Both of these approaches use unsafe programming languages significant complexity \todo{is complexity the right word to use?} to their solutions. Instead, can this problem be solved more easily with a safe programming language like rust \parencite{rustlang}?
 
 \section{Approach}
 % How am I going to solve this problem?
-My approach involves writing a plugin for the rust compiler. This plugin would take the abstract syntax tree of the rust program that is being compiled, and analyse what each statement depends on and the statement modifies. This would create a dependency tree, where any two tasks that are independent can be run in parallel.
+My approach involves writing a plugin for the rust compiler. The rust compiler plugin system allows for different types of plugin, which are run at different stages of the compilation. A syntax extension plugin can manipulate the abstract syntax tree of any annotated function, one function at a time. A linter plugin can see the abstract syntax tree of every function without annotations but it cannot manipulate anything.
 
-\todo{Talk about Linter and Syntax Extension, and rust compiler plugin limitations}
+This problem requires read access to the entire abstract syntax tree, and then modify access to the parallelisable parts. Due to the order of execution, the syntax extension plugin would be executed first and then the linter plugin but I would require them to be executed in the opposite order. To solve this problem, I propose that the program is compiled twice.
+
+On the first compilation, the syntax extension plugin would do nothing. The linter plugin would view the entire abstract data tree and analyse what each statement depends on and modifies. This would create a dependency tree, where any two statements that are independent can be run in parallel. The linter plugin would use this dependency tree to determine which parts should be parallelised, and save this information to a file.
+
+On the second compilation, the syntax extension would be able to read the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The linter plugin would also be able to view this file, and it could produce compiler warnings for any function that could be parallelised that is missing an annotation.
 
 \subsection{Requirements}
 % List hardware and software required for the project
@@ -32,19 +36,42 @@ I believe that I have access to all the required software and hardware for this 
 	\item A computer to program on
 	\item Source code of some rust programs to parallelise
 	\item Rust compiler (and it's source code)
-	\item Atom
+	\item A text editor to write code in (Atom)
 \end{itemize}
 
-\subsection{Timeline}
+\subsection{Estimated Timeline}
 % Timetable of the different phases of development
 % When are these phases going to be completed
-\todo{Add estimated dates}
+\begin{tabularx}{\textwidth}{ | >{\hsize=0.15\hsize}X | >{\hsize=0.85\hsize}X |}
+	\hline
+	\textbf{Estimated End Date} & \textbf{Milestone} \\
+	\hline
+	TBD & Create two plugins, a linter and a syntax extension, and get them to communicate via a file \\
+	\hline
+	TBD & Get access to the abstract syntax tree inside the linter plugin \\
+	\hline
+	TBD & In the linter plugin, analyse each statement to see what variables they depends on and what variables are modified (if any) \\
+	\hline
+	TBD & Produce a dependency tree for the entire program based on this analysis \\
+	\hline
+	TBD & Look for areas in the tree which do not depend on one another, these areas could be run in parallel \\
+	\hline
+	TBD & Save these areas to the shared file used for communication. Make sure that the syntax extension plugin can read this file correctly \\
+	\hline
+	TBD & In the syntax extension plugin, first try one statement in parallel to test it works and then try to run everything in parallel \\
+	\hline
+	TBD & Run tests against rust programs for program correctness and calculate speedup/slowdown against the serial version. \\
+	\hline
+	TBD & In the linter plugin, try to analyse the speed of each parallelisable part. Threads have an overhead so it may be faster to run in serial for some cases. Record this into the shared file. \\
+	\hline
+	TBD & In the syntax extension plugin, take into consideration the time information and only run parts in parallel if it would be faster to run in parallel \\
+	\hline
+	TBD & Run more tests against rust programs for speedup/slowdown. \\
+	\hline
+\end{tabularx}
 
-Below is an estimated timeline of the project.
-
+\begin{comment}
 \begin{itemize}
-	\item Write this proposal
-	\item Submit the ethical review
 	\item Create two plugins, a linter and a syntax extension
 	\begin{itemize}
 		\item Get the linter plugin to:
@@ -60,12 +87,12 @@ Below is an estimated timeline of the project.
 			\item Read the file the Linter plugin creates
 			\item First try one statement in parallel to test it works
 			\item Then try to run everything in parallel to test it works
-			\item Then only run parts in parallel if it would be faster to run in parallel (maybe compile to if $n < 1000$ then serial else parallel)
+			\item Then
 		\end{itemize}
 	\end{itemize}
 	\item Do some testing
-	\item Write a report
 \end{itemize}
+\end{comment}
 
 \subsection{Possible Extensions}
 % Or show how the project can be reduced if it takes too long
