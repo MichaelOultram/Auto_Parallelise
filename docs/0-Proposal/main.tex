@@ -20,6 +20,7 @@
 \textcite{kish2002end} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{geer2005chip}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. Is it possible to automate these changes to convert sequential code into parallelised code? Previous attempts at solving this problem include \textcite{d1998fortran} where they automated parallelisation of sequential FORTRAN code and \textcite{baskaran2010automatic} where they automated conversion of sequential C into CUDA code. Both of these approaches use unsafe programming languages significant complexity \todo{is complexity the right word to use?} to their solutions. Instead, can this problem be solved more easily with a safe programming language like rust \parencite{rustlang}?
 
 \section{Approach}
+\label{sec:approach}
 % How am I going to solve this problem?
 My approach involves writing a plugin for the rust compiler. The rust compiler plugin system allows for different types of plugin, which are run at different stages of the compilation. A syntax extension plugin can manipulate the abstract syntax tree of any annotated function, one function at a time. A linter plugin can see the abstract syntax tree of every function without annotations but it cannot manipulate anything.
 
@@ -60,13 +61,13 @@ I believe that I have access to all the required software and hardware for this 
 	\hline
 	TBD & In the syntax extension plugin, first try one statement in parallel to test it works and then try to run everything in parallel \\
 	\hline
-	TBD & Run tests against rust programs for program correctness and calculate speedup/slowdown against the serial version. \\
+	TBD & Run tests against rust programs for program correctness and calculate speedup/slowdown against the sequential version \\
 	\hline
-	TBD & In the linter plugin, try to analyse the speed of each parallelisable part. Threads have an overhead so it may be faster to run in serial for some cases. Record this into the shared file. \\
+	TBD & In the linter plugin, try to analyse the speed of each parallelisable part. Threads have an overhead so it may be faster to run in sequential for some cases. Record this into the shared file \\
 	\hline
 	TBD & In the syntax extension plugin, take into consideration the time information and only run parts in parallel if it would be faster to run in parallel \\
 	\hline
-	TBD & Run more tests against rust programs for speedup/slowdown. \\
+	TBD & Run more tests against rust programs for speedup/slowdown \\
 	\hline
 \end{tabularx}
 
@@ -96,50 +97,42 @@ I believe that I have access to all the required software and hardware for this 
 
 \subsection{Possible Extensions}
 % Or show how the project can be reduced if it takes too long
-If I'm ahead of schedule with the coding section of this project, I could look into parallelising `if' statements which have a slow condition. Each branch of the `if' would be run in a separate thread using cloned data. When the condition is finally calculated the incorrect branches would need to be deleted. This kind of parallelisation is different from the project plan as some threads are ``thrown away''.
+If I'm ahead of schedule with the coding section of this project, I could look into parallelising branches which have a slow condition (i.e. `if' statements). Each branch would run isolated in separate thread using cloned data. When the condition is finally calculated the incorrect branches would be terminated. This kind of parallelisation is different from the project plan as some threads are ``thrown away''.
 
-Another possible extension upon the previous extension is to utilise the GPU using CUDA in cases where a large number of threads are doing the exact same task on different data. I feel it is very unlikely that I would have time for this extension, and I'm unsure of how much real world code would be written in such a way that it could be automatically run on the GPU efficiently.
+Another extension upon the previous extension would be to utilise the GPU in cases where the same isolatable task is repeated a large number of times but on different data such that the overhead of moving this task to the GPU is worthwhile. It is very unlikely that I would attempt this extension due to the amount of work required, and I'm unsure about how much real world code exists that could be automatically run on the GPU efficiently.
 
 \section{Evaluation}
-\subsection{Disadvantages to the Chosen Approach}
-While I think the approach I have chosen is the best option to solve the problem, there are a few downsides to this proposed approach.
-
-To take an existing sequential rust program and compile it requires a few steps. The compiler plugin crate would need to be imported, and every function would need to be annotated so that the plugin has edit access to the abstract syntax tree for that function.
-
-Due to the limitation of rust compiler plugins, the program would need to be compiled twice. The first compile would allow the entire syntax tree to be analysed for parallelisable sections. The second compile would edit the syntax tree to move the parallelisable sections into separate threads.
-
-\textbf{Project Risks:}
-\begin{itemize}
-	\item Compiler code too complicated to use
-	\item Size of task is too large
-	\item No idea how to analyse the speed to statements at compile time yet
-	\item ``Independent tasks can be run in parallel'' is true in my head, but maybe not in practice
-	\item Rust may not give me all the guarantees that I think it would give me
-\end{itemize}
-
-
 % Why is the chosen solution the best?
-% What are the other approaches (and why they are bad)?
+To evaluate whether the chosen approach is the best option to solve the problem, it is worth looking at the downsides to this approach, and look other possible approaches. I will also describe how I will evaluate the final solution to see whether it solves the original problem.
+
+\subsection{Disadvantages to the Chosen Approach}
+The first downside is that the target program would need to be compiled twice due to the limitation of rust compiler plugins as explained \autoref{sec:approach}. It might be possible to edit the rust compiler to make it so that the program needs to be compiled once, but this has its own downsides as explained in \ref{sec:customrust}.
+
+The second downside is installing the compiler plugins. To take an existing sequential rust program and compile it so that it runs in parallel would require a few steps. The compiler plugin crate would need to be imported, and every function would need to be annotated so that the syntax extension plugin has edit access to the abstract syntax tree for each function.
+
 \subsection{Other Approaches}
-There are other approaches to the problem that I am trying to solve (some of which have already been implemented). I will explain these other approaches and why I didn't choose them.
+% What are the other approaches (and why they are bad)?
+Below are a few other approaches to the problem that I considered before reaching the chosen approach. Each alternative approach looks at the potential benefits over the chosen one and then explains why I did not choose that alternate approach.
 
 \subsubsection{Make a custom rust compiler}
-One of the downsides of the chosen approach is that the program has to be compiled twice. I may be able to bypass this limitation by making a fork of the rust compiler instead of using compiler plugins. It would then be possible to examine the entire abstract syntax tree and then edit it afterwards. However, this approach would add significant complexity to the project as the rust compiler code is very complex.
+\label{sec:customrust}
+One of the downsides of the chosen approach is that the program has to be compiled twice. I may be able to bypass this limitation by making a fork of the rust compiler instead of using compiler plugins. It would then be possible to examine the entire abstract syntax tree and then edit it afterwards. However, this approach seems infeasible for me as the rust compiler code complexity would add too much time to the project.
 
 \subsubsection{Use a different language from rust}
-There are many programs out there, written in many different languages. So why rust? Rust is not even in the top 25 of most popular programming languages according to \textcite{stackoverflowsurvey}. Using a more popular language would make this tool more useful for more programs. Rust isn't unpopular as it is the most loved language and the 10th language on the most want to lean list \parencite{stackoverflowsurvey}. The main reason for using rust is the guaranteed memory safety and threads without race conditions which would help significantly with the task.
+There are many programs out there, written in many different languages. So why rust? Rust is not in the top 25 of most popular programming languages, according to \textcite{stackoverflowsurvey}, so the number of existing programs may smaller than a more popular language. Rust is not unpopular however making it the most loved language and the 10th language on the most want to lean list \parencite{stackoverflowsurvey}. If there are not enough existing programs to justify specialising the tool just for rust (which there probably is), the number programs should increase exponentially in the future. The main reason I chose rust is because it is a safe language with guaranteed memory safety and threads without race conditions which would help significantly with the task.
 
-\subsubsection{Manually annotate the parts of the program that are parallelisable}
-\parencite{dagum1998openmp}
+\subsubsection{Manual annotation of the parts of the program that are parallelisable}
+\todo{Make sentences}
+Instead of analysing the program for parallelisable parts, let the programmer use annotations to show which functions can be run in parallel, similar to OpenMP developed for C++ \parencite{dagum1998openmp}. This would be significantly simpler than the chosen approach as the analysation and dependency tree steps of the compilation could essentially be removed. The programmer is responsible for telling the compiler what can and cannot be parallelised. If the programmer accidentally makes a function parallel that should not be run in parallel, then the compiler would either need to spot this error (using the analysis step that was removed) or it would create an incorrect program. This approach would also not allow for automatic translation from sequential to parallel code and so it is not that much better than using threads manually.
 
 \subsubsection{Just run the sequential code}
-Running code in multiple threads has some overhead.
+All of this analysis at compile time (and the fact that it would compile twice in the chosen approach) would increase compile times and running code in multiple threads has some runtime overhead. Is it worth the development time of automating the conversion of sequential code into parallelisable code? This is a valid argument if the number of sequential programs that could benefit from this software is small enough such that it would be faster and easier to redevelop these programs. It must also be true that developing future programs as parallel programs would have the same difficulty as developing it as a sequential program for this argument to hold. Since developing parallel programs is more difficult than developing sequential programs, and there are probably enough programs that could benefit from this software, it is worth the development time to create this piece of software. \todo{Make this argument more sound}
 
 \subsection{Measuring Project Success}
 % How will I know if the project is a success?
 % How am I going to evaluate my solution to the problem?
 
-I can evaluate the successfulness of my solution by measuring the speedup of parallelising the program vs the original serial code. I'll look at existing programs written in rust to see any real world impact.
+I can look at existing programs written in rust to see if there is any real world impact by measuring the speedup of the parallelised program vs the original sequential code. I can also calculate what percentage of the static sequential code has been parallelised, and what percentage of the runtime is using the parallel code. From these statistics, I can evaluate how well my solution solves the problem.
 
 \section{References}
 \printbibliography[heading=none]
