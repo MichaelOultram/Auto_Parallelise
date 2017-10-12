@@ -47,27 +47,27 @@ I believe that I have access to all the required software and hardware for this 
 	\hline
 	\textbf{Estimated End Date} & \textbf{Milestone} \\
 	\hline
-	TBD & Create two plugins, a linter and a syntax extension, and get them to communicate via a file \\
+	30/10/2017 & Create two plugins, a linter and a syntax extension, and get them to communicate via a file \\
 	\hline
-	TBD & Get access to the abstract syntax tree inside the linter plugin \\
+	13/11/2017 & Get access to the abstract syntax tree inside the linter plugin \\
 	\hline
-	TBD & In the linter plugin, analyse each statement to see what variables they depends on and what variables are modified (if any) \\
+	27/11/2017 & In the linter plugin, analyse each statement to see what variables they depends on and what variables are modified (if any) \\
 	\hline
-	TBD & Produce a dependency tree for the entire program based on this analysis \\
+	11/12/2017 & Produce a dependency tree for the entire program based on this analysis \\
 	\hline
-	TBD & Look for areas in the tree which do not depend on one another, these areas could be run in parallel \\
+	25/12/2017 & Look for areas in the tree which do not depend on one another, these areas could be run in parallel \\
 	\hline
-	TBD & Save these areas to the shared file used for communication. Make sure that the syntax extension plugin can read this file correctly \\
+	08/01/2018 & Save these areas to the shared file used for communication. Make sure that the syntax extension plugin can read this file correctly \\
 	\hline
-	TBD & In the syntax extension plugin, first try one statement in parallel to test it works and then try to run everything in parallel \\
+	22/01/2018 & In the syntax extension plugin, first try one statement in parallel to test it works and then try to run everything in parallel \\
 	\hline
-	TBD & Run tests against rust programs for program correctness and calculate speedup/slowdown against the sequential version \\
+	29/01/2018 & Run tests against rust programs for program correctness and calculate speedup/slowdown against the sequential version \\
 	\hline
-	TBD & In the linter plugin, try to analyse the speed of each parallelisable part. Threads have an overhead so it may be faster to run in sequential for some cases. Record this into the shared file \\
+	12/02/2018 & In the linter plugin, try to analyse the speed of each parallelisable part. Threads have an overhead so it may be faster to run in sequential for some cases. Record this into the shared file \\
 	\hline
-	TBD & In the syntax extension plugin, take into consideration the time information and only run parts in parallel if it would be faster to run in parallel \\
+	26/03/2018 & In the syntax extension plugin, take into consideration the time information and only run parts in parallel if it would be faster to run in parallel \\
 	\hline
-	TBD & Run more tests against rust programs for speedup/slowdown \\
+	05/03/2018 & Run more tests against rust programs for speedup/slowdown \\
 	\hline
 \end{tabularx}
 
