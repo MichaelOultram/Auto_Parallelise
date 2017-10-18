@@ -2,14 +2,15 @@
 #![feature(use_external_macros)]
 
 #![feature(plugin)]
-#![plugin(compiler_plugins)]
+#![plugin(auto_parallelise)]
 
 use std::time::Instant;
 
+#[auto_parallelise]
 fn main() {
     let mut now = Instant::now();
 
-    let fibs = fibinacci_array(rn!(X) as usize);
+    let fibs = fibinacci_array(10);
     println!("{:?}", fibs);
 
     let elapsed = now.elapsed();
@@ -17,6 +18,7 @@ fn main() {
     println!("Seconds: {}", sec);
 }
 
+#[auto_parallelise]
 fn fibinacci_array(length: usize) -> Vec<u128> {
     let mut output = vec![1,1];
     for i in 2..length {
@@ -30,11 +32,12 @@ fn fibinacci_array(length: usize) -> Vec<u128> {
     output
 }
 
-#[para]
+#[auto_parallelise]
 fn test_function() -> u32 {
     test_function2()
 }
 
+#[auto_parallelise]
 fn test_function2() -> u32 {
     2
 }

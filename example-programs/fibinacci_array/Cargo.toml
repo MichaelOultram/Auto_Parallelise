@@ -1,10 +1,10 @@
 [package]
 name = "fibinacci_array"
 version = "0.1.0"
-authors = ["Michael Oultram <MichaelOultram@users.noreply.github.com>"]
+authors = ["Michael Oultram <michael@oultr.am>"]
 
 [dependencies]
-compiler_plugins = { version = "0.1.0", path = "compiler_plugins" }
+auto-parallelise = { version = "0.1.0", path = "../../auto-parallelise"}
 
 [features]
 default = []
