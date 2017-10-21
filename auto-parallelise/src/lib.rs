@@ -19,11 +19,11 @@ mod syntax_extension;
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
     // Try to load AutoParallelise
-    let mut obj = AutoParallelise::new();
+    let obj = AutoParallelise::new();
     println!("[auto-parallelise] Compiler plugin loaded");
 
     // Second pass uses the syntax extension
-    reg.register_syntax_extension(Symbol::intern("auto_parallelise"), obj.gen_syntax_extension());
+    reg.register_syntax_extension(Symbol::intern("auto_parallelise"), MultiModifier(Box::new(obj)));
 
     // First pass uses the linter
     reg.register_late_lint_pass(Box::new(obj));
@@ -38,6 +38,7 @@ pub enum CompilerStage {
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct AutoParallelise {
     compiler_stage: CompilerStage,
+    counter: u32,
 }
 
 impl AutoParallelise {
@@ -45,6 +46,7 @@ impl AutoParallelise {
         // TODO: Check if a file exists
         AutoParallelise {
             compiler_stage: CompilerStage::Analysis,
+            counter: 0,
         }
     }
 }

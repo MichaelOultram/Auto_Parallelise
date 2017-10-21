@@ -1,13 +1,11 @@
 use syntax::codemap::Span;
-use syntax::ast::{BindingMode, ItemKind, MetaItem, FunctionRetTy, Stmt, StmtKind, PatKind, ExprKind};
-use syntax::ast::Mutability::*;
-use syntax::ext::base::{SyntaxExtension, ExtCtxt, Annotatable};
+use syntax::ast;
+use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
 
 use AutoParallelise;
 
-impl AutoParallelise {
-    pub fn gen_syntax_extension(&mut self) -> SyntaxExtension {
-        unimplemented!() // TODO
+impl MultiItemModifier for AutoParallelise {
+    fn expand(&self, _ecx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
+        vec![_item]
     }
-
 }
