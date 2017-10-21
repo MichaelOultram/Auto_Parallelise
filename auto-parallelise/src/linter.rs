@@ -13,7 +13,7 @@ impl LintPass for AutoParallelise {
 }
 
 impl<'a, 'tcx> LateLintPass<'a, 'tcx> for AutoParallelise {
-    fn check_body(&mut self, _: &LateContext, _: &'tcx hir::Body) { }
+    fn check_body(&mut self, _: &LateContext, _: &'tcx hir::Body) { self.save(); }
     fn check_body_post(&mut self, _: &LateContext, _: &'tcx hir::Body) { }
     fn check_name(&mut self, _: &LateContext, _: Span, _: ast::Name) { }
     fn check_crate(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Crate) { }
