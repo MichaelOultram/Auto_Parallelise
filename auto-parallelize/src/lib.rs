@@ -28,7 +28,7 @@ pub fn plugin_registrar(reg: &mut Registry) {
     println!("[auto-parallelise] Compiler plugin loaded");
 
     // Second pass uses the syntax extension
-    reg.register_syntax_extension(Symbol::intern("auto_parallelise"), MultiModifier(Box::new(obj)));
+    reg.register_syntax_extension(Symbol::intern("auto_parallelize"), MultiModifier(Box::new(obj)));
 
     // First pass uses the linter
     reg.register_late_lint_pass(Box::new(obj));
@@ -46,7 +46,7 @@ pub struct AutoParallelise {
 }
 
 impl AutoParallelise {
-    pub fn new() -> Self {
+    fn new() -> Self {
         AutoParallelise {
             compiler_stage: CompilerStage::Analysis,
         }

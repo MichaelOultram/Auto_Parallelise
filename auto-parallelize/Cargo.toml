@@ -1,5 +1,5 @@
 [package]
-name = "auto-parallelise"
+name = "auto-parallelize"
 version = "0.1.0"
 authors = ["Michael Oultram <michael@oultr.am>"]
 

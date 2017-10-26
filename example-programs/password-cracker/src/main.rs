@@ -1,5 +1,5 @@
 #![feature(plugin)]
-#![plugin(auto_parallelise)]
+#![plugin(auto_parallelize)]
 
 extern crate crypto;
 use self::crypto::digest::Digest;
@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::io::{BufRead, BufReader};
 use std::fs::File;
 
-#[auto_parallelise]
+#[auto_parallelize]
 fn load_dictionary() -> Vec<String> {
     let mut dict = vec![];
 
@@ -24,7 +24,7 @@ fn load_dictionary() -> Vec<String> {
     dict
 }
 
-#[auto_parallelise]
+#[auto_parallelize]
 fn crack_password_single(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
     for word in dictionary {
         // Hash word using Sha256
@@ -40,7 +40,7 @@ fn crack_password_single(dictionary: &Vec<String>, hash_password: String) -> Opt
     None
 }
 
-#[auto_parallelise]
+#[auto_parallelize]
 fn main() {
     let now = Instant::now();
 
