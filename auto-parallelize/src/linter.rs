@@ -1,96 +1,53 @@
-use rustc::lint::{LintArray, LintPass, LateContext, LateLintPass};
-use rustc::hir;
-use rustc::hir::intravisit::FnKind;
+use rustc::lint::{LintArray, LintPass, EarlyContext, EarlyLintPass};
 use syntax::ast;
 use syntax_pos::Span;
+use syntax::visit::{self, FnKind};
 
-use AutoParallelise;
+use AutoParallelize;
+use CompilerStage;
 
-impl LintPass for AutoParallelise {
+impl LintPass for AutoParallelize {
     fn get_lints(&self) -> LintArray {
         lint_array!()
     }
 }
 
-impl<'a, 'tcx> LateLintPass<'a, 'tcx> for AutoParallelise {
-    fn check_body(&mut self, _: &LateContext, _: &'tcx hir::Body) { self.save(); }
-    fn check_body_post(&mut self, _: &LateContext, _: &'tcx hir::Body) { }
-    fn check_name(&mut self, _: &LateContext, _: Span, _: ast::Name) { }
-    fn check_crate(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Crate) { }
-    fn check_crate_post(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Crate) { }
-    fn check_mod(&mut self,
-                 _: &LateContext<'a, 'tcx>,
-                 _: &'tcx hir::Mod,
-                 _: Span,
-                 _: ast::NodeId) { }
-    fn check_mod_post(&mut self,
-                      _: &LateContext<'a, 'tcx>,
-                      _: &'tcx hir::Mod,
-                      _: Span,
-                      _: ast::NodeId) { }
-    fn check_foreign_item(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::ForeignItem) { }
-    fn check_foreign_item_post(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::ForeignItem) { }
-    fn check_item(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Item) { }
-    fn check_item_post(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Item) { }
-    fn check_local(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Local) { }
-    fn check_block(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Block) { }
-    fn check_block_post(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Block) { }
-    fn check_stmt(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Stmt) { }
-    fn check_arm(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Arm) { }
-    fn check_pat(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Pat) { }
-    fn check_decl(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Decl) { }
-    fn check_expr(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Expr) { }
-    fn check_expr_post(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Expr) { }
-    fn check_ty(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Ty) { }
-    fn check_generics(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Generics) { }
-    fn check_fn(&mut self,
-                _: &LateContext<'a, 'tcx>,
-                _: FnKind<'tcx>,
-                _: &'tcx hir::FnDecl,
-                _: &'tcx hir::Body,
-                _: Span,
-                _: ast::NodeId) { }
-    fn check_fn_post(&mut self,
-                     _: &LateContext<'a, 'tcx>,
-                     _: FnKind<'tcx>,
-                     _: &'tcx hir::FnDecl,
-                     _: &'tcx hir::Body,
-                     _: Span,
-                     _: ast::NodeId) { }
-    fn check_trait_item(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::TraitItem) { }
-    fn check_trait_item_post(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::TraitItem) { }
-    fn check_impl_item(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::ImplItem) { }
-    fn check_impl_item_post(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::ImplItem) { }
-    fn check_struct_def(&mut self,
-                        _: &LateContext<'a, 'tcx>,
-                        _: &'tcx hir::VariantData,
-                        _: ast::Name,
-                        _: &'tcx hir::Generics,
-                        _: ast::NodeId) { }
-    fn check_struct_def_post(&mut self,
-                             _: &LateContext<'a, 'tcx>,
-                             _: &'tcx hir::VariantData,
-                             _: ast::Name,
-                             _: &'tcx hir::Generics,
-                             _: ast::NodeId) { }
-    fn check_struct_field(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::StructField) { }
-    fn check_variant(&mut self,
-                     _: &LateContext<'a, 'tcx>,
-                     _: &'tcx hir::Variant,
-                     _: &'tcx hir::Generics) { }
-    fn check_variant_post(&mut self,
-                          _: &LateContext<'a, 'tcx>,
-                          _: &'tcx hir::Variant,
-                          _: &'tcx hir::Generics) { }
-    fn check_lifetime(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Lifetime) { }
-    fn check_lifetime_def(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::LifetimeDef) { }
-    fn check_path(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx hir::Path, _: ast::NodeId) { }
-    fn check_attribute(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx ast::Attribute) { }
+impl EarlyLintPass for AutoParallelize {
+    fn check_fn(&mut self, _context: &EarlyContext, _fnkind: visit::FnKind, _fndecl: &ast::FnDecl, _span: Span, _nodeid: ast::NodeId) {
+        // Only need to analyse function during the analysis stage
+        if self.compiler_stage != CompilerStage::Analysis {
+            self.save();
+            return;
+        }
 
-    /// Called when entering a syntax node that can have lint attributes such
-    /// as `#[allow(...)]`. Called with *all* the attributes of that node.
-    fn enter_lint_attrs(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx [ast::Attribute]) { }
+        match _fnkind {
+            FnKind::ItemFn(.., block) | FnKind::Method(.., block) =>
+            println!("[auto-parallelize] check_fn(context, block: {:?}, {:?}, {:?}, {})", block, _fndecl, _span, _nodeid),
+            FnKind::Closure(body) =>
+            println!("[auto-parallelize] check_fn(context, body: {:?}, {:?}, {:?}, {})", body, _fndecl, _span, _nodeid),
+        }
+        self.save();
+    }
 
-    /// Counterpart to `enter_lint_attrs`.
-    fn exit_lint_attrs(&mut self, _: &LateContext<'a, 'tcx>, _: &'tcx [ast::Attribute]) { }
+    // Used to detect when the EarlyLintPass is over
+    // TODO: Check this works for all programs
+    fn enter_lint_attrs(&mut self, _: &EarlyContext, _: &[ast::Attribute]) {
+        self.linter_level += 1;
+    }
+    fn exit_lint_attrs(&mut self, _: &EarlyContext, _: &[ast::Attribute]) {
+        self.linter_level -= 1;
+        if self.linter_level == 0 {
+            self.save();
+            match self.compiler_stage {
+                CompilerStage::Analysis => {
+                    println!("[auto-parallelize] Recompile to apply parallelization modifications");
+                    ::std::process::exit(1);
+                },
+                CompilerStage::Modification => {
+                    println!("[auto-parallelize] Parallelized compilation complete");
+                    self.delete();
+                },
+            }
+        }
+    }
 }

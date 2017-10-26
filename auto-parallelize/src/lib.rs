@@ -19,19 +19,19 @@ use std::path::Path;
 mod linter;
 mod syntax_extension;
 
-static SAVE_FILE: &'static str = ".auto-parallelise";
+static SAVE_FILE: &'static str = ".auto-parallelize";
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-    // Try to load AutoParallelise
-    let obj = AutoParallelise::load();
-    println!("[auto-parallelise] Compiler plugin loaded");
+    // Try to load AutoParallelize
+    let obj = AutoParallelize::load();
+    println!("[auto-parallelize] Compiler plugin loaded");
 
     // Second pass uses the syntax extension
     reg.register_syntax_extension(Symbol::intern("auto_parallelize"), MultiModifier(Box::new(obj)));
 
     // First pass uses the linter
-    reg.register_late_lint_pass(Box::new(obj));
+    reg.register_early_lint_pass(Box::new(obj));
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,14 +41,16 @@ pub enum CompilerStage {
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
-pub struct AutoParallelise {
+pub struct AutoParallelize {
     compiler_stage: CompilerStage,
+    linter_level : u32,
 }
 
-impl AutoParallelise {
+impl AutoParallelize {
     fn new() -> Self {
-        AutoParallelise {
+        AutoParallelize {
             compiler_stage: CompilerStage::Analysis,
+            linter_level: 0,
         }
     }
 
@@ -59,7 +61,7 @@ impl AutoParallelise {
 
         // If the file cannot be open, this is a new run
         if let Err(_) = maybe_file {
-            return AutoParallelise::new()
+            return AutoParallelize::new()
         }
         let mut file = maybe_file.unwrap();
 
@@ -69,11 +71,13 @@ impl AutoParallelise {
             panic!("Failed to open {}: {}", path.display(), why)
         }
 
-        // Try to convert it the string to an AutoParallelise object
-        let mut obj : AutoParallelise = match serde_json::from_str(&s) {
+        // Try to convert it the string to an AutoParallelize object
+        let mut obj : AutoParallelize = match serde_json::from_str(&s) {
             Ok(obj) => obj,
             Err(why) => panic!("Failed to read {}: {}", path.display(), why),
         };
+
+        obj.linter_level = 0;
 
         if obj.compiler_stage == CompilerStage::Analysis {
             // Last stage was Analysis, this stage should parallelise
@@ -81,7 +85,7 @@ impl AutoParallelise {
             obj
         } else {
             // Last stage was Modification, so we need to start from scratch
-            AutoParallelise::new()
+            AutoParallelize::new()
         }
     }
 
@@ -91,7 +95,7 @@ impl AutoParallelise {
         // Try to convert the object to json
         let obj_json = match serde_json::to_string(&self) {
             Ok(obj) => obj,
-            Err(why) => panic!("Unable to convert AutoParellise to JSON: {}", why),
+            Err(why) => panic!("Unable to convert AutoParellize to JSON: {}", why),
         };
 
         // Open the file in write-only mode
@@ -101,9 +105,12 @@ impl AutoParallelise {
         };
 
         // Write obj_json into the file
-        match file.write_all(obj_json.as_bytes()) {
-            Err(why) => panic!("Failed to write {}: {}", path.display(), why),
-            Ok(_) => (),
+        if let Err(why) = file.write_all(obj_json.as_bytes()) {
+            panic!("Failed to write {}: {}", path.display(), why);
         }
+    }
+
+    pub fn delete(&self) {
+        // TODO: Delete .auto-parallelize
     }
 }
