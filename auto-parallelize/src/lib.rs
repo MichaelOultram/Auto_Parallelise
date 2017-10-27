@@ -12,7 +12,7 @@ use rustc_plugin::Registry;
 use syntax::ext::base::SyntaxExtension::{MultiModifier};
 use syntax::symbol::Symbol;
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::prelude::*;
 use std::path::Path;
 
@@ -111,6 +111,9 @@ impl AutoParallelize {
     }
 
     pub fn delete(&self) {
-        // TODO: Delete .auto-parallelize
+        match fs::remove_file(SAVE_FILE) {
+            Ok(_) => {},
+            Err(why) => panic!("Failed to delete {}: {}", SAVE_FILE, why),
+        }
     }
 }

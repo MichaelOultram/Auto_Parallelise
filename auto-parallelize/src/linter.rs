@@ -21,10 +21,16 @@ impl EarlyLintPass for AutoParallelize {
         }
 
         match _fnkind {
-            FnKind::ItemFn(.., block) | FnKind::Method(.., block) =>
-            println!("[auto-parallelize] check_fn(context, block: {:?}, {:?}, {:?}, {})", block, _fndecl, _span, _nodeid),
+            FnKind::ItemFn(ident, generics, unsafety, spanned, abi, visibility, block) =>
+            println!("\n[auto-parallelize] check_fn(context, ItemFn: {:?}, {:?}, {:?}, {})", block, _fndecl, _span, _nodeid),
+
+            /// fn foo(&self)
+            FnKind::Method(ident, methodSig, visibility, block) =>
+            println!("\n[auto-parallelize] check_fn(context, Method: {:?}, {:?}, {:?}, {})", block, _fndecl, _span, _nodeid),
+
+            /// |x, y| body
             FnKind::Closure(body) =>
-            println!("[auto-parallelize] check_fn(context, body: {:?}, {:?}, {:?}, {})", body, _fndecl, _span, _nodeid),
+            println!("\n[auto-parallelize] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", body, _fndecl, _span, _nodeid),
         }
         self.save();
     }
@@ -38,6 +44,7 @@ impl EarlyLintPass for AutoParallelize {
         self.linter_level -= 1;
         if self.linter_level == 0 {
             self.save();
+            self.delete(); // TODO: Remove this line to enable modifications
             match self.compiler_stage {
                 CompilerStage::Analysis => {
                     println!("[auto-parallelize] Recompile to apply parallelization modifications");
