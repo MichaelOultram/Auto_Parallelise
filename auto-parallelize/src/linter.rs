@@ -5,6 +5,7 @@ use syntax::visit::{self, FnKind};
 
 use AutoParallelize;
 use CompilerStage;
+use *;
 
 impl LintPass for AutoParallelize {
     fn get_lints(&self) -> LintArray {
@@ -21,16 +22,31 @@ impl EarlyLintPass for AutoParallelize {
         }
 
         match _fnkind {
-            FnKind::ItemFn(ident, generics, unsafety, spanned, abi, visibility, block) =>
-            println!("\n[auto-parallelize] check_fn(context, ItemFn: {:?}, {:?}, {:?}, {})", block, _fndecl, _span, _nodeid),
+            // fn foo()
+            FnKind::ItemFn(_ident, _generics, _unsafety, _spanned, _abi, _visibility, _block) => {
+                //println!("\n[auto-parallelize] check_fn(context, ItemFn: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid);
+                println!("\n\n{:?}", _fndecl);
+                let ident_name: String = _ident.name.to_string();
+                let ident_ctxt: String = format!("{:?}", _ident.ctxt);
+                let input_types = vec![];
+                for ref arg in &_fndecl.inputs {
+                    println!("ARG: {:?}, {:?}", arg.ty.node, arg.pat);
+                }
+                self.parellelized_functions.push(Function {
+                    ident_name: ident_name,
+                    ident_ctxt: ident_ctxt,
+                    input_types: input_types,
+                    output_type: None,
+                });
+            },
 
-            /// fn foo(&self)
-            FnKind::Method(ident, methodSig, visibility, block) =>
-            println!("\n[auto-parallelize] check_fn(context, Method: {:?}, {:?}, {:?}, {})", block, _fndecl, _span, _nodeid),
+            // fn foo(&self)
+            FnKind::Method(_ident, _method_sig, _visibility, _block) =>
+            println!("\n[auto-parallelize] check_fn(context, Method: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid),
 
-            /// |x, y| body
-            FnKind::Closure(body) =>
-            println!("\n[auto-parallelize] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", body, _fndecl, _span, _nodeid),
+            // |x, y| body
+            FnKind::Closure(_body) =>
+            println!("\n[auto-parallelize] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", _body, _fndecl, _span, _nodeid),
         }
         self.save();
     }
@@ -44,7 +60,6 @@ impl EarlyLintPass for AutoParallelize {
         self.linter_level -= 1;
         if self.linter_level == 0 {
             self.save();
-            self.delete(); // TODO: Remove this line to enable modifications
             match self.compiler_stage {
                 CompilerStage::Analysis => {
                     println!("[auto-parallelize] Recompile to apply parallelization modifications");

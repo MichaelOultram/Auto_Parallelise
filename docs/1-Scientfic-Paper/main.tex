@@ -18,14 +18,20 @@
 \maketitle
 
 \begin{abstract}
+  There is a significant amount of research in automatic translation of sequential source code into a parallelized version. Most of this has been focused on FORTRAN and C which are both unsafe programming languages. This paper explores the literature and applies these ideas to the safe programming language Rust.
+  \todo{Expand, and cleanup}
 \end{abstract}
 
 \section{Introduction}
-\textcite{kish2002end} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{geer2005chip}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. Is it possible to automate these changes to convert sequential code into parallelised code? Previous attempts at solving this problem include \textcite{d1998fortran} where they automated parallelisation of sequential FORTRAN code and \textcite{baskaran2010automatic} where they automated conversion of sequential C into CUDA code. Both of these approaches use unsafe programming languages significant complexity \todo{is complexity the right word to use?} to their solutions. Instead, can this problem be solved more easily with a safe programming language like rust \parencite{rustlang}?
 
 \section{Literature Review}
+Most research is for FORTRAN and the DO loops \parencite{Banerjee1993}.
+
+\todo{Look at the different models, try to explain the differences}
+
+Some people have converted C-to-CUDA \parencite{Baskaran2010, Verdoolaege2013}.
 
 \section{Problem Details}
 
-\printbibliography{}
+\printbibliography
 \end{document}

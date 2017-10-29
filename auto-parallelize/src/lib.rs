@@ -18,6 +18,8 @@ use std::path::Path;
 
 mod linter;
 mod syntax_extension;
+mod shared_state;
+use shared_state::*;
 
 static SAVE_FILE: &'static str = ".auto-parallelize";
 
@@ -28,22 +30,17 @@ pub fn plugin_registrar(reg: &mut Registry) {
     println!("[auto-parallelize] Compiler plugin loaded");
 
     // Second pass uses the syntax extension
-    reg.register_syntax_extension(Symbol::intern("auto_parallelize"), MultiModifier(Box::new(obj)));
+    reg.register_syntax_extension(Symbol::intern("auto_parallelize"), MultiModifier(Box::new(obj.clone())));
 
     // First pass uses the linter
     reg.register_early_lint_pass(Box::new(obj));
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum CompilerStage {
-    Analysis, // First Stage
-    Modification, // Second Stage
-}
-
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AutoParallelize {
     compiler_stage: CompilerStage,
-    linter_level : u32,
+    linter_level: u32, // Used to determine when linter has finished
+    parellelized_functions: Vec<Function>,
 }
 
 impl AutoParallelize {
@@ -51,10 +48,14 @@ impl AutoParallelize {
         AutoParallelize {
             compiler_stage: CompilerStage::Analysis,
             linter_level: 0,
+            parellelized_functions: vec![],
         }
     }
 
     pub fn load() -> Self {
+        // TODO: Remove this line to enable modifications
+        return AutoParallelize::new();
+
         // Attempt to open .auto-parallise file
         let path = Path::new(SAVE_FILE);
         let maybe_file = File::open(&path);
