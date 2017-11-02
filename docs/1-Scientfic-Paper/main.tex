@@ -27,13 +27,33 @@
 \textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. Automatically converting sequential source code into parallelised source code is one solution to this problem, and it is the solution that this paper explores.
 
 \section{Literature Review}
+\subsection{Parallelisation models:}
+\textbf{Static parallelism done at compile time:}
+% Polyhedral model and affine transformation
+\textcite{Bondhugula2008} describes automatic transformations for
+communication-minimized parallelisation and locality optimization in the Polyhedral Model. It is far too confusing...
+
+% Iteration space slicing > affine transformations
+\textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than Affine Transformation Framework
+
+\textbf{Speculative parallelism done at run time:}
+% Third option: Speculation
+There is speculative parallelism which is at run time \parencite{Yiapanis2015}.
+
+\subsection{Implementations}
 Most research is for FORTRAN and the DO loops \parencite{Banerjee1993}.
 
-\todo{Look at the different models, try to explain the differences}
+OpenMP \parencite{Dagum1998,Lam2011}.
 
 Some people have converted C-to-CUDA \parencite{Baskaran2010, Verdoolaege2013}.
 
-\section{Problem Details} % or Design Section?
+\section{Problem Details}
+\todo{Write about what exactly I want to parallelise. Which methods from the literature am I following and why?}
+
+\todo{Include what rust is, what plugins can do in this section}
+
+\section{Design}
+\todo{Describe how I will use the features of rust plugins}
 The rust compiler allows for plugins of different types. A syntax extension plugin can modify the abstract syntax tree of any annotated function. An early lint pass plugin can see any of the functions, with macros expanded, but it cannot edit them.  The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. The rust compiler executes syntax extension plugins first, and then the linter plugins. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
 
 When the plugin is loaded, it determines which stage it is by looking for a .auto-parallelize file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded into a struct using the `serde\_json' crate and the stage is updated to be the modification stage.
