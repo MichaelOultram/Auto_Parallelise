@@ -18,11 +18,13 @@
 \maketitle
 
 \begin{abstract}
-  There is a significant amount of research in automatic translation of sequential source code into a parallelized version. Most of this has been focused on FORTRAN and C which are both unsafe programming languages. This paper explores the literature and applies these ideas to the safe programming language Rust.
+  A significant amount of research in automatic translation from sequential to parallel source code is focused on FORTRAN and C, both of which are unsafe programming languages. Due to the languages being unsafe, a lot of effort is spent in reconstructing the program, especially with FORTRAN and its GOTO statements.
+  This paper explores the literature's ideas and extract the key information to apply the same transformations to programs written in rust: a safe programming language.
   \todo{Expand, and cleanup}
 \end{abstract}
 
 \section{Introduction}
+\textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. Automatically converting sequential source code into parallelised source code is one solution to this problem, and it is the solution that this paper explores.
 
 \section{Literature Review}
 Most research is for FORTRAN and the DO loops \parencite{Banerjee1993}.
@@ -31,7 +33,20 @@ Most research is for FORTRAN and the DO loops \parencite{Banerjee1993}.
 
 Some people have converted C-to-CUDA \parencite{Baskaran2010, Verdoolaege2013}.
 
-\section{Problem Details}
+\section{Problem Details} % or Design Section?
+The rust compiler allows for plugins of different types. A syntax extension plugin can modify the abstract syntax tree of any annotated function. An early lint pass plugin can see any of the functions, with macros expanded, but it cannot edit them.  The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. The rust compiler executes syntax extension plugins first, and then the linter plugins. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
+
+When the plugin is loaded, it determines which stage it is by looking for a .auto-parallelize file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded into a struct using the `serde\_json' crate and the stage is updated to be the modification stage.
+
+\subsection{Analysis stage}
+On the first compilation, the syntax extension plugin would do nothing. The linter plugin would view the entire abstract data tree and analyse what each statement depends on and modifies. This would create a dependency tree, where any two statements that are independent can be run in parallel. The linter plugin would use this dependency tree to determine which parts should be parallelised, and save this information to a file.
+
+Detecting the end of the analysis stage required some work.
+
+\subsection{Modification stage}
+On the second compilation, the syntax extension would be able to read the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The linter plugin would also be able to view this file, and it could produce compiler warnings for any function that could be parallelised that is missing an annotation.
+
+\todo{Show example code and the desired transformation}
 
 \printbibliography
 \end{document}
