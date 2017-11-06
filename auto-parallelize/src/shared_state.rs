@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub enum CompilerStage {
     Analysis, // First Stage
     Modification, // Second Stage

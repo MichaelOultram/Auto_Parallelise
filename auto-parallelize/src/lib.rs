@@ -27,7 +27,11 @@ static SAVE_FILE: &'static str = ".auto-parallelize";
 pub fn plugin_registrar(reg: &mut Registry) {
     // Try to load AutoParallelize
     let obj = AutoParallelize::load();
-    println!("[auto-parallelize] Compiler plugin loaded");
+    let stage = match obj.compiler_stage {
+        CompilerStage::Analysis => 1,
+        CompilerStage::Modification => 2,
+    };
+    println!("[auto-parallelize] Stage {} of 2 - {:?}", stage, obj.compiler_stage);
 
     // Second pass uses the syntax extension
     reg.register_syntax_extension(Symbol::intern("auto_parallelize"), MultiModifier(Box::new(obj.clone())));

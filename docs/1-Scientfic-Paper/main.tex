@@ -4,7 +4,7 @@
 % The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
 %\usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
+%\usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{textcomp}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
@@ -51,10 +51,120 @@ Some people have converted C-to-CUDA \parencite{Baskaran2010, Verdoolaege2013}.
 \todo{Write about what exactly I want to parallelise. Which methods from the literature am I following and why?}
 
 \todo{Include what rust is, what plugins can do in this section}
+The rust compiler allows for plugins of different types. A syntax extension plugin can modify the abstract syntax tree of any annotated function. An early lint pass plugin can see any of the functions, with macros expanded, but it cannot edit them. The rust compiler executes syntax extension plugins first, and then the linter plugins.
+
+\todo{For optimisations: Describe what is slow and what is required for optimisation. Good example sequential and parallel. Explain why/when faster (i.e. long list). Bad example of sequential. Explain why it cannot be converted}
+
+\subsection{Parallel Function Optimisations}
+If the function's arguments are not modifiable references and the function does not contain an unsafe block, then the function can be run in parallel.
+
+\begin{minted}{rust}
+fn main() {
+    let i = 10;
+    // A lot of stuff
+    println!("{}", fibinacci(i));
+}
+
+fn fibinacci(n: u32) -> u64 {
+    match n {
+        0    => 0,
+        1, 2 => 1,
+        _    => fibinacci(n-1) + fibinacci(n-2),
+    }
+}
+\end{minted}
+into
+\begin{minted}{rust}
+fn main() {
+    let i = 10;
+    let fib = fibinacci_parallel(i);
+    // A lot of stuff
+    println!("{}", fib.join());
+}
+
+fn fibinacci_parallel(n: u32) -> JoinHandle<u64> {
+    thread::spawn(move || {
+        match n {
+            0    => 0,
+            1, 2 => 1,
+            _    => {
+                let n1 = fibinacci_parallel(n-1);
+                let n2 = fibinacci_parallel(n-2);
+                n1.join() + n2.join();
+            },
+        }
+    })
+}
+
+fn fibinacci(n: u32) -> u64 {
+    let fib = fibinacci_parallel(n);
+    fib.join()
+}
+\end{minted}
+
+These changes allow for fibonacci to start calculating as soon as i is decided, instead of waiting for `lots of stuff' to be executed. Also n1 and n2 are executed in parallel. fibinacci is changed to use the parallel version and then immediatley tries to get the result. This should allow for any external functions that are not modified to still work.
+
+\subsection{For-Loop Optimisations}
+If all the loop iterations are independent of each other, then we can run all the iterations at the same time. Example:
+
+\begin{minted}{rust}
+let mut list = vec![1,2,3,4,5];
+for i in 0..list.len() {
+    list[i] *= 2;
+}
+\end{minted}
+could be converted into
+\todo{Make code below compile}
+\begin{minted}{rust}
+let mut list = vec![1,2,3,4,5];
+// Create a communication channel
+let (tx, rx) = mpsc::channel();
+let handles = vec![];
+// Start all threads
+for i in 0..list.len() {
+    let element = list[i];
+    let tx = tx.clone();
+    handles.push(thread::spawn(move || {
+        let result = element * 2;
+        tx.send((i, result));
+    }));
+}
+// Wait for all threads to be finished
+for handle in handles {
+    handle.join();
+}
+// Receive all the results and update list
+for _ in 0..list.len() {
+    let (i, result) = rx.receive();
+    list[i] = result;
+}
+\end{minted}
+In this simple case, the inner for loop has one operations and so the threaded version would be slower due to overhead. If the operation inside the loop was more complex, and the list was longer, then this conversion would make sense.
+
+Real world example:
+\begin{minted}{rust}
+fn crack_password(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
+    for word in dictionary {
+        // Hash word using Sha256
+        let mut hasher = Sha256::new();
+        hasher.input_str(word);
+        let hash_word = hasher.result_str();
+
+        // Check if hash matches
+        if hash_password == hash_word {
+            return Some(word.clone());
+        }
+    }
+    None
+}
+\end{minted}
+
+\subsection{Branch Optimisations}
+In the previous optimisations, all the code that is run in parallel would have be run in sequential normally. This optimisation is for if statements which have a very slow condition. Each side of the branch is run in parallel, and then when the condition is finally worked out, the correct branch is kept.
 
 \section{Design}
 \todo{Describe how I will use the features of rust plugins}
-The rust compiler allows for plugins of different types. A syntax extension plugin can modify the abstract syntax tree of any annotated function. An early lint pass plugin can see any of the functions, with macros expanded, but it cannot edit them.  The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. The rust compiler executes syntax extension plugins first, and then the linter plugins. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
+The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
 
 When the plugin is loaded, it determines which stage it is by looking for a .auto-parallelize file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded into a struct using the `serde\_json' crate and the stage is updated to be the modification stage.
 
