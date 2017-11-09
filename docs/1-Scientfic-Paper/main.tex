@@ -22,13 +22,13 @@
 \maketitle
 
 \begin{abstract}
-  Processors have been gaining more multi-core performance which sequential code cannot take advantage of. One solution to this problem is to automatically convert sequential source code into parallelised source code. The literature for this topic is explored and it is split into two main areas: theoretical models of automatic parallelisation and real-world parallelising compilers. Three sequential elements of programs are converted manually by this paper and a design is outlined to automate these conversions in a new parallelising compiler for the safe programming language rust. 
+  Processors have been gaining more multi-core performance which sequential code cannot take advantage of. One solution to this problem is to automatically convert sequential source code into parallelised source code. The literature for this topic is explored and it is split into two main areas: theoretical models of automatic parallelisation and real-world parallelising compilers. Three sequential elements of programs are converted manually by this paper and a design is outlined to automate these conversions in a new parallelising compiler for the safe programming language rust.
 \end{abstract}
 
 \section{Introduction}
 \textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code.
 
-\section{Literature Review}
+\section{Related Work}
 \subsection{Parallelisation Models}
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
@@ -122,8 +122,9 @@ fn fibonacci(n: u32) -> u64 {
 \autoref{code:par-fibonacci} shows one way of converting \autoref{code:seq-fibonacci} into a more parallelised version. These changes allow for fibonacci to start calculating as soon as i is decided, instead of waiting for `lots of stuff' to be executed. Also n1 and n2 are executed in parallel. fibonacci is changed to use the parallel version and then immediatley tries to get the result. This should allow for any external functions that are not modified to still work.
 
 \subsection{For-Loop Optimisations}
-If all the loop iterations are independent of each other, then we can run all the iterations at the same time.
+If all the loop iterations are independent of each other, then we can run all the iterations at the same time. However, in most cases, loops are only partially parallelisable.
 
+\begin{comment}
 \subsubsection{List manipulation}
 
 \begin{algorithm}
@@ -147,20 +148,16 @@ could be converted into
 let mut list = vec![1,2,3,4,5];
 // Create a communication channel
 let (tx, rx) = mpsc::channel();
-let handles = vec![];
 // Start all threads
 for i in 0..list.len() {
     let element = list[i];
     let tx = tx.clone();
-    handles.push(thread::spawn(move || {
+    thread::spawn(move || {
         let result = element * 2;
         tx.send((i, result));
-    }));
+    });
 }
-// Wait for all threads to be finished
-for handle in handles {
-    handle.join();
-}
+
 // Receive all the results and update list
 for _ in 0..list.len() {
     let (i, result) = rx.receive();
@@ -171,24 +168,99 @@ for _ in 0..list.len() {
 
 In this simple case, the inner for loop has one operations and so the threaded version would be slower due to overhead. If the operation inside the loop was more complex, and the list was longer, then this conversion would make sense.
 
+\end{comment}
+
 \subsubsection{Password cracker}
-Real world example:
+\autoref{code:seq-password} is a real world example where the for loop is combined with an if statement which returns the password for the first valid hash. If we were to naively put the contents of the for loop into separate threads, as shown in \autoref{code:par-naive-password}, then we may end up with the wrong result. In the sequential for loop, the first password in the list to match the hash would be returned. In the naive parallel version, the password returned depends on the order the threads are run.
+
 \begin{algorithm}
 \caption{Sequential Password Cracker}
 \label{code:seq-password}
 \begin{minted}{rust}
-fn crack_password(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
+fn crack_password(dictionary: &Vec<String>,
+                  hash_password: String)
+                  -> Option<String> {
     for word in dictionary {
         // Hash word using Sha256
-        let mut hasher = Sha256::new();
-        hasher.input_str(word);
-        let hash_word = hasher.result_str();
-
+        let mut sha = Sha256::new();
+        sha.input_str(word);
+        let hash_word = sha.result_str();
         // Check if hash matches
         if hash_password == hash_word {
             return Some(word.clone());
         }
     }
+    // No hash matched
+    None
+}
+\end{minted}
+\end{algorithm}
+
+\begin{algorithm}
+\caption{Naive Parallel Password Cracker}
+\label{code:par-naive-password}
+\begin{minted}{rust}
+fn crack_password(dictionary: &Vec<String>,
+                  hash_password: String)
+                  -> Option<String> {
+    // Create a communication channel
+    let (tx, rx) = mpsc::channel();
+    // Start a thread for each dictionary entry
+    for i in 0..dictionary.len() {
+        let word = dictionary[i].clone();
+        let tx = tx.clone();
+        thread::spawn(move || {
+            // Hash word using Sha256
+            let result = {
+                let mut sha = Sha256::new();
+                sha.input_str(word);
+                let hash_word = sha.result_str();
+                // Send result via channel
+                if hash_password == hash_word {
+                    Some(word)
+                } else {
+                    None
+                }
+            };
+            tx.send(result);
+        });
+    }
+    // Receive up to dictionary.len() results
+    for _ in 0..dictionary.len() {
+        if let Some(result) = rx.receive() {
+            return result;
+        }
+    }
+    // No hash matched
+    None
+}
+\end{minted}
+\end{algorithm}
+
+\autoref{code:seq-refactor-password} shows that we split the for loop into two parts, the hashing part (which is parallelisable) and the verifying part (which is not as parallelisable if we want to keep the order). \autoref{code:par-password} is the final complete parallelisation of \autoref{code:seq-password}. Each word is hashed in it's own thread and the hash is compared to \texttt{hash\_password}. The result of
+
+\begin{algorithm}
+\caption{Refactored Sequential Password Cracker}
+\label{code:seq-refactor-password}
+\begin{minted}{rust}
+fn crack_password(dictionary: &Vec<String>,
+                  hash_password: String)
+                  -> Option<String> {
+    let mut hashes = vec![];
+    for word in dictionary {
+        // Hash word using Sha256
+        let mut sha = Sha256::new();
+        sha.input_str(word);
+        let hash_word = sha.result_str();
+        hashes.push(hash_word);
+    }
+    // Check if hash matches
+    for hash_word in hashes {
+        if hash_password == hash_word {
+            return Some(word.clone());
+        }
+    }
+    // No hash matched
     None
 }
 \end{minted}
@@ -199,28 +271,30 @@ fn crack_password(dictionary: &Vec<String>, hash_password: String) -> Option<Str
 \caption{Parallel Password Cracker}
 \label{code:par-password}
 \begin{minted}{rust}
-fn crack_password(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
+fn crack_password(dictionary: &Vec<String>,
+                  hash_password: String)
+                  -> Option<String> {
     // Create a communication channel
     let (tx, rx) = mpsc::channel();
-    let handles = vec![];
-    let hashes = dictionary.clone();
     for i in 0..dictionary.len() {
-        let word = dictionary[i];
+        let word = dictionary[i].clone();
         let tx = tx.clone();
-        handles.push(thread::spawn(move || {
+        thread::spawn(move || {
             // Hash word using Sha256
-            let mut hasher = Sha256::new();
-            hasher.input_str(word);
-            hashes[i] = hasher.result_str();
-            // Check if hash matches
-            if hash_password == hash_word {
-                tx.send((i, Some(word.clone())));
-            } else {
-                tx.send((i, None));
-            }
-        }));
+            let result = {
+                let mut sha = Sha256::new();
+                sha.input_str(word);
+                let hash_word = sha.result_str();
+                // Check if hash matches
+                if hash_password == hash_word {
+                    Some(word)
+                } else {
+                    None
+                }
+            };
+            tx.send((i, result));
+        });
     }
-
     // Receive all the results
     // Have to return same result as sequential
     let mut results = vec![];
@@ -228,7 +302,7 @@ fn crack_password(dictionary: &Vec<String>, hash_password: String) -> Option<Str
         let (i, result) = rx.receive();
         //TODO: FINISH THIS
     }
-
+    // No hash matched
     None
 }
 \end{minted}
