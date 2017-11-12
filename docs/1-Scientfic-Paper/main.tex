@@ -22,49 +22,75 @@
 \maketitle
 
 \begin{abstract}
-  Processors have been gaining more multi-core performance which sequential code cannot take advantage of. One solution to this problem is to automatically convert sequential source code into parallelised source code. The literature for this topic is explored and it is split into two main areas: theoretical models of automatic parallelisation and real-world parallelising compilers. Three sequential elements of programs are converted manually by this paper and a design is outlined to automate these conversions in a new parallelising compiler for the safe programming language rust.
+  Processors have been gaining more multi-core performance which sequential code cannot take advantage of. One solution to this problem is to automatically convert sequential source code into parallelised source code. The literature for this topic is explored and it is split into two main areas: theoretical models of automatic parallelisation and real-world parallelising compilers. Three sequential elements of Rust programs are converted manually by this paper and a design is outlined to automate these conversions in a new parallelising compiler for the safe programming language Rust.
 \end{abstract}
 
 \section{Introduction}
 \textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code.
 
+\todo{Paragraphs do not link yet}
+
+``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to Rust will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
+
+\todo{Explain the Rust language syntax and memory model}
+
 \section{Related Work}
+\todo{Write up and cleanup. Also read the papers}
 \subsection{Parallelisation Models}
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
 \textcite{Feautrier1992} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities.
 
-\textcite{Bondhugula2008} describes the affine transformations required to allow for communication-minimized parallelisation and locality optimization. The Polyhedral Model is far too confusing...
+% Polyhedral model and affine transformation
+\textcite{Bondhugula2008} describes the affine transformations required to allow for communication-minimized parallelisation and locality optimization.
 
 % Iteration space slicing > affine transformations
 \textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than Affine Transformation Framework
 
 \subsubsection{Speculative parallelism}
 % Third option: Speculation
-\textcite{Prabhu2010} provides an API for C\# to allow the programmer to specify areas of speculative parallelism. \textcite{Yiapanis2015} moves this into the compiler.
+\textcite{Prabhu2010} provides an API for C\# to allow the programmer to specify areas of speculative parallelism.
+\textcite{Yiapanis2015} moves this into the compiler.
+
 
 \subsection{Parallelisation Implementations}
-Most research is focused on FORTRAN and the DO loops \parencite{Banerjee1993}.
+\textcite{DHollander1998} converts FORTRAN and DO loops.
+\textcite{Eigenmann1998} parallelises benchmarks using FORTRAN.
+\textcite{Kim2000} converts FORTRAN using OpenMP.
 
-OpenMP \parencite{Dagum1998,Lam2011}.
+\textcite{Rauchwerger1999} uses FORTRAN speculatively on for loops.
+\textcite{Quinones2005} uses speculation and iteration space slicing together.
 
-Some people have converted C-to-CUDA \parencite{Baskaran2010, Verdoolaege2013}.
+OpenMP is a programming interface for shared memory programming.
+\textcite{Dagum1998} compares OpenMP to alterative parallel programming models.
+\textcite{Lam2011} extends OpenMP using machine learning to automate the parallelisation.
+
+GPUs are another focus due to their number of threads.
+\textcite{Baskaran2010} have converted C-to-CUDA.
+\textcite{Verdoolaege2013} generates CUDA code using the Polyhedral model.
 
 \section{Problem Details}
-\todo{Write about what exactly I want to parallelise. Which methods from the literature am I following and why? Include what rust is, what plugins can do in this section}
+\todo{Write about what exactly I want to parallelise. Which methods from the literature am I following and why? Include what Rust is, what plugins can do in this section}
 
-The rust compiler allows for plugins of different types. A syntax extension plugin can modify the abstract syntax tree of any annotated function. An early lint pass plugin can see any of the functions, with macros expanded, but it cannot edit them. The rust compiler executes syntax extension plugins first, and then the linter plugins.
+The literature focuses on unsafe languages such as C/C++ and FORTRAN and as a result, most of their methods revolve around understanding conflicts between iterations. Due to the different memory model in Rust, the information that the literature's approaches tried to gather is readily available.
 
-I will focus mostly on attempting static parallelism. The literature focuses on unsafe languages such as C/C++ and FORTRAN and as a result, most of their methods revolve around restructuring the program into a more readable state. I will not focus on this as I am using a safe language (and it looked real hard).
-Below are some examples of sequential code optimisations that I would like to automate using a rust compiler plugin. They are ordered based on their complexity.
+The Rust compiler allows for plugins of different types but there are two types that are of interest to this problem. Written in the order of execution, they are:
+\begin{itemize}
+    \item Syntax Extension: can modify the abstract syntax tree of any annotated function.
+    \item Early Lint Pass: can see abstract syntax tree of each uncompiled function, with macros expanded, without annotations, but it cannot edit them.
+\end{itemize}
+
+To automate the parallelisation of Rust programs, the process must be manually to understand the problem. Below are some examples of sequential code and their manually calculated optimisations that could be automated using a Rust compiler plugin. They are ordered based on their complexity.
 
 \todo{For optimisations: Describe what is slow and what is required for optimisation. Good example sequential and parallel. Explain why/when faster (i.e. long list). Bad example of sequential. Explain why it cannot be converted}
 
 \subsection{Parallel Function Optimisations}
-If the function's arguments are not modifiable references and the function does not contain an unsafe block, then the function can be run in parallel.
+In some cases the arguments of a function are known well before the result of the function is required. In sequential programs, only one function is executed at once and so when the result is required, the program switches to that function. This function could be started in the background as soon as the arguments are decided if the program was parallelised. This would allow the result to be ready for when it is requested or at least closer to ready than the pure sequential code.
+In Rust terms, if the function's arguments are not modifiable references and the function does not contain an unsafe block, then the function can be run in parallel.
+\todo{Check this fact}
 
-\subsubsection{Fibonacci}
-
+\textit{Example:}
+%\subsubsection{Fibonacci}
 \autoref{code:seq-fibonacci} is a program that calculates Fibonacci numbers, written in a very inefficient way. The main method knows that $i = 10$ on the first line, and since it is not mutable, this cannot be changed. But the main method does `a lot of stuff' which will not affect the \texttt{fibonacci} function before calling it. Just running the \texttt{fibonacci} function earlier would not improve performance, as now `a lot of stuff' must wait for \texttt{fibonacci} to finish. Ideally, we want to start calculating \texttt{fibonacci} at the very beginning at the same time as doing `a lot of stuff' and wait for the result when we need it.
 
 \begin{algorithm}
@@ -124,53 +150,8 @@ fn fibonacci(n: u32) -> u64 {
 \subsection{For-Loop Optimisations}
 If all the loop iterations are independent of each other, then we can run all the iterations at the same time. However, in most cases, loops are only partially parallelisable.
 
-\begin{comment}
-\subsubsection{List manipulation}
-
-\begin{algorithm}
-\caption{Sequential For Loop}
-\label{code:seq-for}
-\begin{minted}{rust}
-let mut list = vec![1,2,3,4,5];
-for i in 0..list.len() {
-    list[i] *= 2;
-}
-\end{minted}
-\end{algorithm}
-
-could be converted into
-\todo{Make code below compile}
-
-\begin{algorithm}
-\caption{Parallel For Loop}
-\label{code:par-for}
-\begin{minted}{rust}
-let mut list = vec![1,2,3,4,5];
-// Create a communication channel
-let (tx, rx) = mpsc::channel();
-// Start all threads
-for i in 0..list.len() {
-    let element = list[i];
-    let tx = tx.clone();
-    thread::spawn(move || {
-        let result = element * 2;
-        tx.send((i, result));
-    });
-}
-
-// Receive all the results and update list
-for _ in 0..list.len() {
-    let (i, result) = rx.receive();
-    list[i] = result;
-}
-\end{minted}
-\end{algorithm}
-
-In this simple case, the inner for loop has one operations and so the threaded version would be slower due to overhead. If the operation inside the loop was more complex, and the list was longer, then this conversion would make sense.
-
-\end{comment}
-
-\subsubsection{Password cracker}
+\textit{Example:}
+%\subsubsection{Password cracker}
 \autoref{code:seq-password} is a real world example where the for loop is combined with an if statement which returns the password for the first valid hash. If we were to naively put the contents of the for loop into separate threads, as shown in \autoref{code:par-naive-password}, then we may end up with the wrong result. In the sequential for loop, the first password in the list to match the hash would be returned. In the naive parallel version, the password returned depends on the order the threads are run.
 
 \begin{algorithm}
@@ -266,7 +247,6 @@ fn crack_password(dictionary: &Vec<String>,
 \end{minted}
 \end{algorithm}
 
-\todo{\autoref{code:par-password} finish}
 \begin{algorithm}
 \caption{Parallel Password Cracker}
 \label{code:par-password}
@@ -297,10 +277,23 @@ fn crack_password(dictionary: &Vec<String>,
     }
     // Receive all the results
     // Have to return same result as sequential
-    let mut results = vec![];
-    for _ in 0..list.len() {
+    let mut results = vec![None; list.len()];
+    let mut verified_upto = -1;
+    for _ in 0..results.len() {
+        // Receive result and store in location
         let (i, result) = rx.receive();
-        //TODO: FINISH THIS
+        results[i] = Some(result);
+        // Check for final result
+        for i in 0..results.len() {
+            if let Some(result) = results[i] {
+                if let Some(word) = result {
+                    return word;
+                }
+            } else {
+                // Have not received i result yet
+                break;
+            }
+        }
     }
     // No hash matched
     None
@@ -311,8 +304,41 @@ fn crack_password(dictionary: &Vec<String>,
 \subsection{Branch Optimisations}
 In the previous optimisations, all the code that is run in parallel would have be run in sequential normally. This optimisation is for if statements which have a very slow condition. Each side of the branch is run in parallel, and then when the condition is finally worked out, the correct branch is kept.
 
+\todo{Code Examples}
+
+\begin{algorithm}
+\caption{Sequential Slow If}
+\label{code:seq-slowif}
+\begin{minted}{rust}
+if slow_condition() {
+    // True Branch
+} else {
+    // False Branch
+}
+\end{minted}
+\end{algorithm}
+
+\begin{algorithm}
+\caption{Parallel Slow If}
+\label{code:par-slowif}
+\begin{minted}{rust}
+let true_branch = thread::spawn(move || {
+    // True Branch
+});
+let false_branch = thread::spawn(move || {
+    // False Branch
+});
+if slow_condition() {
+    true_branch.join()
+} else {
+    false_branch.join()
+}
+\end{minted}
+\end{algorithm}
+
 \section{Design}
-\todo{Describe how I will use the features of rust plugins}
+\todo{Describe how I will use the features of Rust plugins}
+
 The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
 
 When the plugin is loaded, it determines which stage it is by looking for a .auto-parallelize file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded into a struct using the `serde\_json' crate and the stage is updated to be the modification stage.
@@ -325,5 +351,8 @@ Detecting the end of the analysis stage required some work.
 \subsection{Modification stage}
 On the second compilation, the syntax extension would be able to read the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The linter plugin would also be able to view this file, and it could produce compiler warnings for any function that could be parallelised that is missing an annotation.
 
+% TODO: Equalising
+%\newpage
+%\enlargethispage{-100mm}
 \printbibliography
 \end{document}
