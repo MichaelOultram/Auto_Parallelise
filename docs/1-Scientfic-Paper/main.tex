@@ -36,10 +36,11 @@
 
 \section{Related Work}
 \todo{Write up and cleanup. Also read the papers}
+\todo{Include \textcite{Zhong2008} somewhere}
 \subsection{Parallelisation Models}
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
-\textcite{Feautrier1992} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities.
+\textcite{Feautrier1992,Feautrier1992b} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities.
 
 % Polyhedral model and affine transformation
 \textcite{Bondhugula2008} describes the affine transformations required to allow for communication-minimized parallelisation and locality optimization.
@@ -52,17 +53,18 @@
 \textcite{Prabhu2010} provides an API for C\# to allow the programmer to specify areas of speculative parallelism.
 \textcite{Yiapanis2015} moves this into the compiler.
 
+\textcite{Prabhu2010} does manual speculative parallelism with a safe language.
 
 \subsection{Parallelisation Implementations}
 \textcite{DHollander1998} converts FORTRAN and DO loops.
 \textcite{Eigenmann1998} parallelises benchmarks using FORTRAN.
-\textcite{Kim2000} converts FORTRAN using OpenMP.
 
 \textcite{Rauchwerger1999} uses FORTRAN speculatively on for loops.
 \textcite{Quinones2005} uses speculation and iteration space slicing together.
 
 OpenMP is a programming interface for shared memory programming.
 \textcite{Dagum1998} compares OpenMP to alterative parallel programming models.
+\textcite{Kim2000} converts FORTRAN using OpenMP automatically.
 \textcite{Lam2011} extends OpenMP using machine learning to automate the parallelisation.
 
 GPUs are another focus due to their number of threads.
@@ -302,7 +304,7 @@ fn crack_password(dictionary: &Vec<String>,
 \end{algorithm}
 
 \subsection{Branch Optimisations}
-In the previous optimisations, all the code that is run in parallel would have be run in sequential normally. This optimisation is for if statements which have a very slow condition. Each side of the branch is run in parallel, and then when the condition is finally worked out, the correct branch is kept.
+In the previous optimisations, all the code that is run in parallel would have be run in sequential normally. This optimisation is for \texttt{if} statements which have a very slow condition. Each side of the branch is run in parallel, and then when the condition is finally worked out, the correct branch is kept. This concept can be expanded for when there are multiple branches such as \texttt{match} statements.
 
 \todo{Code Examples}
 
@@ -310,10 +312,14 @@ In the previous optimisations, all the code that is run in parallel would have b
 \caption{Sequential Slow If}
 \label{code:seq-slowif}
 \begin{minted}{rust}
-if slow_condition() {
-    // True Branch
-} else {
-    // False Branch
+fn slow_if(a: u32, b: u32) {
+    if slow_condition(a, b) {
+        let c = b - a;
+        (a * c) + 5
+    } else {
+        let c = a * b;
+        (c + 19) ^ 2
+    }
 }
 \end{minted}
 \end{algorithm}
@@ -322,17 +328,30 @@ if slow_condition() {
 \caption{Parallel Slow If}
 \label{code:par-slowif}
 \begin{minted}{rust}
-let true_branch = thread::spawn(move || {
-    // True Branch
-});
-let false_branch = thread::spawn(move || {
-    // False Branch
-});
-if slow_condition() {
-    true_branch.join()
-} else {
-    false_branch.join()
+fn slow_if(a: u32, b: u32) {
+    let true_branch = {
+        let a = a.clone();
+        let b = b.clone();
+        thread::spawn(move || {
+            let c = b - a;
+            (a * c) + 5
+        })
+    };
+    let false_branch = {
+        let a = a.clone();
+        let b = b.clone();
+        thread::spawn(move || {
+            let c = a * b;
+            (c + 19) ^ 2
+        })
+    };
+    if slow_condition(a, b) {
+        true_branch.join()
+    } else {
+        false_branch.join()
+    }
 }
+
 \end{minted}
 \end{algorithm}
 
