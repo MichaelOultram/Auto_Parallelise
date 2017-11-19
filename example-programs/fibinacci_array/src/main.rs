@@ -8,21 +8,27 @@ extern crate num_cpus;
 #[macro_use]
 extern crate lazy_static;
 
-use std::time::Instant;
-
-mod pool;
+extern crate auto_parallelize;
+use auto_parallelize::taskpool::ThreadPool;
 use std::sync::mpsc::Receiver;
-use pool::ThreadPool;
+
+use std::time::Instant;
 
 //#[auto_parallelize]
 fn main() {
     let threadpool = ThreadPool::new(num_cpus::get() - 1);
     let now = Instant::now();
+    let n = 40;
 
+    //let fibs = fibinacci(n);
+    let fibs_task = fibinacci_par(threadpool.clone(), n);
     println!("num_cpus: {}", num_cpus::get());
+    /*for i in 0..10 {
+        threadpool.print();
+        thread::sleep_ms(500);
+    }*/
+    let fibs = threadpool.result(fibs_task);
 
-    let fibs = fibinacci_par(threadpool.clone(), 20).recv().unwrap();
-    //let fibs = fibinacci(10);
     println!("{:?}", fibs);
 
     let elapsed = now.elapsed();
@@ -55,13 +61,13 @@ fn fibinacci(n: u32) -> u128 {
 //#[auto_parallelize]
 fn fibinacci_par(threadpool: ThreadPool, n: u32) -> Receiver<u128> {
     let pool = threadpool.clone();
-    threadpool.task(move || {
+    threadpool.task_block(move || {
         match n {
             0 | 1 => 1,
             _ => {
                 let a = fibinacci_par(pool.clone(), n - 1);
                 let b = fibinacci_par(pool.clone(), n - 2);
-                a.recv().unwrap() + b.recv().unwrap()
+                pool.result(a) + pool.result(b)
             },
         }
     })

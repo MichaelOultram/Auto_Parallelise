@@ -1,0 +1,38 @@
+n = 30
+
+parallel-no-exit
+num_cpus: 16
+1346269
+Seconds: 0.831465604
+
+parallel-with-exit
+num_cpus: 16
+1346269
+Seconds: 0.586935259
+
+parallel-with-blocked
+num_cpus: 16
+1346269
+Seconds: 22.515074267
+
+sequential
+num_cpus: 16
+1346269
+Seconds: 0.003705757
+
+n = 40
+
+parallel-no-exit
+num_cpus: 16
+165580141
+Seconds: 93.710035265
+
+parallel-with-exit
+num_cpus: 16
+165580141
+Seconds: 91.625106706
+
+sequential
+num_cpus: 16
+165580141
+Seconds: 0.376551959
