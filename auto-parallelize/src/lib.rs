@@ -20,6 +20,7 @@ mod linter;
 mod syntax_extension;
 mod shared_state;
 use shared_state::*;
+pub mod treepool;
 
 static SAVE_FILE: &'static str = ".auto-parallelize";
 

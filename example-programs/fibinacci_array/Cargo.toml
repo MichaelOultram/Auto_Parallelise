@@ -5,6 +5,9 @@ authors = ["Michael Oultram <michael@oultr.am>"]
 
 [dependencies]
 auto-parallelize = { version = "0.1.0", path = "../../auto-parallelize"}
+num_cpus = "0.2"
+lazy_static = "0.2"
+scoped-pool = "1"
 
 [features]
 default = []
