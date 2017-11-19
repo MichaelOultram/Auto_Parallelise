@@ -1,0 +1,11 @@
+HashAttempts: 10
+Sequential: 14.835288603
+Parallel: 30.070198524
+
+HashAttempts: 20
+Sequential: 28.964080727
+Parallel: 31.11587306
+
+HashAttempts: 40
+Sequential: 58.362892658
+Parallel: 35.031631026

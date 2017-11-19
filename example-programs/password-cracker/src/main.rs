@@ -37,9 +37,12 @@ fn crack_password_parallel(dictionary: &Vec<String>, hash_password: String) -> O
         let hash_password = hash_password.clone();
         handles.push(threadpool.task_block(move || {
             // Hash word using Sha256
-            let mut hasher = Sha256::new();
-            hasher.input_str(&word);
-            let hash_word = hasher.result_str();
+            let mut hash_word: String = word.clone();
+            for _ in 0..40 {
+                let mut hasher = Sha256::new();
+                hasher.input_str(&hash_word);
+                hash_word = hasher.result_str();
+            }
 
             // Check if hash matches
             if hash_password == hash_word {
@@ -60,12 +63,15 @@ fn crack_password_parallel(dictionary: &Vec<String>, hash_password: String) -> O
 }
 
 //#[auto_parallelize]
-fn crack_password_single(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
+fn crack_password_sequential(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
     for word in dictionary {
         // Hash word using Sha256
-        let mut hasher = Sha256::new();
-        hasher.input_str(word);
-        let hash_word = hasher.result_str();
+        let mut hash_word: String = word.clone();
+        for _ in 0..40 {
+            let mut hasher = Sha256::new();
+            hasher.input_str(&hash_word);
+            hash_word = hasher.result_str();
+        }
 
         // Check if hash matches
         if hash_password == hash_word {
@@ -75,13 +81,25 @@ fn crack_password_single(dictionary: &Vec<String>, hash_password: String) -> Opt
     None
 }
 
+fn crack_password_single(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
+    // Hash word using Sha256
+    let mut hash_word: String = "ZZZZZZZZZZ".to_owned();
+    for _ in 0..40 {
+        let mut hasher = Sha256::new();
+        hasher.input_str(&hash_word);
+        hash_word = hasher.result_str();
+    }
+
+    Some(hash_word.clone())
+}
+
 //#[auto_parallelize]
 fn main() {
     let now = Instant::now();
 
     let dictionary = load_dictionary();
-    let hash_password = format!("61bdb3487ed81633ee4d7875745028739a92feb91f27d704fdfcfa8be5f0b3ee");
-    let password = crack_password_single(&dictionary, hash_password);
+    let hash_password = format!("be9f36142cf64f3804323c8f29bc5822d01e60f7849244c59ff42de38d11fa37");
+    let password = crack_password_parallel(&dictionary, hash_password);
     match password {
         Some(word) => println!("Found password: {}", word),
         None => println!("Could not find password"),
