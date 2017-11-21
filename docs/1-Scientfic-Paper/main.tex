@@ -35,25 +35,25 @@
 \todo{Explain the Rust language syntax and memory model}
 
 \section{Related Work}
+\label{sec:related-work}
 \todo{Write up and cleanup. Also read the papers}
 \todo{Include \textcite{Zhong2008} somewhere}
 \subsection{Parallelisation Models}
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
 \textcite{Feautrier1992,Feautrier1992b} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities.
-
-% Polyhedral model and affine transformation
-\textcite{Bondhugula2008} describes the affine transformations required to allow for communication-minimized parallelisation and locality optimization.
+%\textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed on the source code to minimise the communication between threads, further increasing the performance of the parallelise
 
 % Iteration space slicing > affine transformations
-\textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than Affine Transformation Framework
+A different method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. \todo{Describe iteration space slicing}
+\textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than Affine Transformation Framework.
 
 \subsubsection{Speculative parallelism}
 % Third option: Speculation
 \textcite{Prabhu2010} provides an API for C\# to allow the programmer to specify areas of speculative parallelism.
 \textcite{Yiapanis2015} moves this into the compiler.
 
-\textcite{Prabhu2010} does manual speculative parallelism with a safe language.
+\textcite{Prabhu2010} does manual speculative parallelism in a safe way.
 
 \subsection{Parallelisation Implementations}
 \textcite{DHollander1998} converts FORTRAN and DO loops.
@@ -72,9 +72,10 @@ GPUs are another focus due to their number of threads.
 \textcite{Verdoolaege2013} generates CUDA code using the Polyhedral model.
 
 \section{Problem Details}
+\label{sec:problem-details}
 \todo{Write about what exactly I want to parallelise. Which methods from the literature am I following and why? Include what Rust is, what plugins can do in this section}
 
-The literature focuses on unsafe languages such as C/C++ and FORTRAN and as a result, most of their methods revolve around understanding conflicts between iterations. Due to the different memory model in Rust, the information that the literature's approaches tried to gather is readily available.
+The literature focuses on unsafe languages such as C/C++ and FORTRAN and as a result, most of their methods revolve around understanding conflicts between iterations. Due to the different memory model in Rust, the dependency information that the literature's approaches tried to gather is readily available.
 
 The Rust compiler allows for plugins of different types but there are two types that are of interest to this problem. Written in the order of execution, they are:
 \begin{itemize}
@@ -355,7 +356,11 @@ fn slow_if(a: u32, b: u32) {
 \end{minted}
 \end{algorithm}
 
-\section{Design}
+\section{Design Overview}
+A typical parallelising compiler, such as those described in \autoref{sec:related-work}, have a few stages. First the compiler looks at each statement of the source code, and perform dependency analysis to calculate the critical path. Any independent statements can be run in parallel. A scheduling algorithm calculates which order the statements are executed, grouping statements that are dependent on each other into the same task. A compile time performance metric is used on each task to estimate the potential speedup of the parallel version over the sequential version. Due to the overhead of threads, this potential speedup would not actually be achieved. The parallelising compiler takes this into account and will only use the parallel version if it predicts it will really be faster.
+
+This papers design takes elements from a typical parallelising compiler, dividing the task into two main stages, an analysis stage and a modification stage.
+
 \todo{Describe how I will use the features of Rust plugins}
 
 The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
@@ -369,6 +374,18 @@ Detecting the end of the analysis stage required some work.
 
 \subsection{Modification stage}
 On the second compilation, the syntax extension would be able to read the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The linter plugin would also be able to view this file, and it could produce compiler warnings for any function that could be parallelised that is missing an annotation.
+
+\todo{Introduce these subsubsections}
+\subsubsection{Infinite Thread Problem}
+The sample programs shown in \autoref{sec:problem-details} assume that threads have no overhead and were used a a method of describing how a sequential program could be run in parallel. In the real world, these parallelised sample programs produce an unreasonable amount of threads of which most are waiting. This causes the parallel version to perform a lot worse than sequential code.
+
+The initial solution for too many threads is to use a thread-pool so only a fixed number of threads are executed at the same time. This solution would not work in this case as if all the threads are waiting on a future task, which is also waiting for a thread to be free then we get stuck in a deadlock. By tweaking the design of the thread-pool slightly, we can have a fixed the number of tasks and prevent this deadlock.
+
+As the task queue is the main cause of this deadlock, it is removed from this new proposed design which will be referred to as a no-queue thread-pool. Whenever a task is created, it looks for an available thread and that thread starts executing the task in the background. If there is no thread available, then the current thread should execute the task. Also, if the the current thread is waiting for a task to return, then it could execute another task whilst waiting. \todo{Display this if statement more visually?} \todo{Explain why this design won't deadlock like the traditional thread-pool}
+
+To modify the sample programs to use the no-queue thread-pool would be of minimal work; it would require a shared memory space (to gain access to the threads) and instead of calling \texttt{thread::spawn}, it would call another function.
+
+\subsubsection{Performance Analysis}
 
 % TODO: Equalising
 %\newpage
