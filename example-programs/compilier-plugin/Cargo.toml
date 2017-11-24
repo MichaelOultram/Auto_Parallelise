@@ -1,6 +1,0 @@
-[package]
-name = "compilier-plugin"
-version = "0.1.0"
-authors = ["Michael Oultram <MichaelOultram@users.noreply.github.com>"]
-
-[dependencies]
