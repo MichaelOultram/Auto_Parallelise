@@ -22,15 +22,13 @@
 \maketitle
 
 \begin{abstract}
-  Processors have been gaining more multi-core performance which sequential code cannot take advantage of. One solution to this problem is to automatically convert sequential source code into parallelised source code. The literature for this topic is explored and it is split into two main areas: theoretical models of automatic parallelisation and real-world parallelising compilers. Three sequential elements of Rust programs are converted manually by this paper and a design is outlined to automate these conversions in a new parallelising compiler for the safe programming language Rust.
+  Processors have been gaining more multi-core performance which sequential code cannot take advantage of. One solution to this problem is to automatically convert sequential source code into parallelised source code. The literature for this topic is explored and it is split into two main areas: theoretical models of automatic parallelisation and real-world parallelising compilers. Three sequential elements of Rust programs are converted manually by this paper and a design is outlined to automate these conversions in a new parallelising compiler.
 \end{abstract}
 
 \section{Introduction}
-\textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code.
+\textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. One solution to this problem, which is the focus of this paper, is to automatically transform sequential source code into parallelised code. This solution, if achieved, would allow for existing (open-source) sequential programs to take advantage of the new hardware. It would also make developing new programs easier for programmers, as they can just write the easier sequential code and let the compiler make it run in parallel.
 
-\todo{Paragraphs do not link yet}
-
-``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to Rust will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
+Section \ref{sec:related-work} examines existing implementations by other authors and finds that most solutions focus on unsafe languages like C++ and FORTRAN. Since a significant proportion of existing programs are written in these languages \todo{source?}, it makes sense for other authors to focus on these languages. There is a downside to focusing on these unsafe languages, dependency analysis becomes much more difficult. Because of this, the design aspects of this paper will use the safe programming language rust. ``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to Rust will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
 
 \todo{Explain the Rust language syntax and memory model}
 
@@ -38,6 +36,7 @@
 \label{sec:related-work}
 \todo{Write up and cleanup. Also read the papers}
 \todo{Include \textcite{Zhong2008} somewhere}
+
 \subsection{Parallelisation Models}
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
@@ -52,8 +51,6 @@ A different method to affine scheduling is iteration space slicing introduced by
 % Third option: Speculation
 \textcite{Prabhu2010} provides an API for C\# to allow the programmer to specify areas of speculative parallelism.
 \textcite{Yiapanis2015} moves this into the compiler.
-
-\textcite{Prabhu2010} does manual speculative parallelism in a safe way.
 
 \subsection{Parallelisation Implementations}
 \textcite{DHollander1998} converts FORTRAN and DO loops.
@@ -365,7 +362,7 @@ This papers design takes elements from a typical parallelising compiler, dividin
 
 The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
 
-When the plugin is loaded, it determines which stage it is by looking for a .auto-parallelize file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded into a struct using the `serde\_json' crate and the stage is updated to be the modification stage.
+When the plugin is loaded, it determines which stage it is by looking for a .autoparallelise file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded into a struct using the `serde\_json' crate and the stage is updated to be the modification stage.
 
 \subsection{Analysis stage}
 On the first compilation, the syntax extension plugin would do nothing. The linter plugin would view the entire abstract data tree and analyse what each statement depends on and modifies. This would create a dependency tree, where any two statements that are independent can be run in parallel. The linter plugin would use this dependency tree to determine which parts should be parallelised, and save this information to a file.
