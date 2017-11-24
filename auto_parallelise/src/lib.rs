@@ -45,7 +45,7 @@ pub fn plugin_registrar(reg: &mut Registry) {
 pub struct AutoParallelise {
     compiler_stage: CompilerStage,
     linter_level: u32, // Used to determine when linter has finished
-    parellelized_functions: Vec<Function>,
+    parallelised_functions: Vec<Function>,
 }
 
 impl AutoParallelise {
@@ -53,7 +53,7 @@ impl AutoParallelise {
         AutoParallelise {
             compiler_stage: CompilerStage::Analysis,
             linter_level: 0,
-            parellelized_functions: vec![],
+            parallelised_functions: vec![],
         }
     }
 
@@ -99,7 +99,7 @@ impl AutoParallelise {
         let path = Path::new(SAVE_FILE);
 
         // Try to convert the object to json
-        let obj_json = match serde_json::to_string(&self) {
+        let obj_json = match serde_json::to_string_pretty(&self) {
             Ok(obj) => obj,
             Err(why) => panic!("Unable to convert AutoParallelise to JSON: {}", why),
         };

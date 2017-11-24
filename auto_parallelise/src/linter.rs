@@ -1,5 +1,5 @@
 use rustc::lint::{LintArray, LintPass, EarlyContext, EarlyLintPass};
-use syntax::ast;
+use syntax::ast::{self, StmtKind};
 use syntax_pos::Span;
 use syntax::visit::{self, FnKind};
 
@@ -24,7 +24,7 @@ impl EarlyLintPass for AutoParallelise {
         match _fnkind {
             // fn foo()
             FnKind::ItemFn(_ident, _generics, _unsafety, _spanned, _abi, _visibility, _block) => {
-                //println!("\n[auto-parallelize] check_fn(context, ItemFn: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid);
+                //println!("\n[auto_parallelise] check_fn(context, ItemFn: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid);
                 println!("\n\n{:?}", _fndecl);
                 let ident_name: String = _ident.name.to_string();
                 let ident_ctxt: String = format!("{:?}", _ident.ctxt);
@@ -32,7 +32,30 @@ impl EarlyLintPass for AutoParallelise {
                 for ref arg in &_fndecl.inputs {
                     println!("ARG: {:?}, {:?}", arg.ty.node, arg.pat);
                 }
-                self.parellelized_functions.push(Function {
+
+                for ref stmt in &_block.stmts {
+                    //println!("STMT: {:?}", stmt);
+                    match &stmt.node {
+                        // A local (let) binding.
+                        &StmtKind::Local(ref local) => println!("{:?}", local),
+
+                        // An item definition.
+                        &StmtKind::Item(ref item) => println!("{:?}", item),
+
+                        // Expr without trailing semi-colon.
+                        &StmtKind::Expr(ref expr) => println!("{:?}", expr),
+
+                        // Expr with a trailing semi-colon.
+                        &StmtKind::Semi(ref expr) => println!("{:?}", expr),
+
+                        // Macro.
+                        &StmtKind::Mac(ref mac) => println!("{:?}", mac),
+                    }
+                }
+
+
+
+                self.parallelised_functions.push(Function {
                     ident_name: ident_name,
                     ident_ctxt: ident_ctxt,
                     input_types: input_types,
@@ -42,11 +65,11 @@ impl EarlyLintPass for AutoParallelise {
 
             // fn foo(&self)
             FnKind::Method(_ident, _method_sig, _visibility, _block) =>
-            println!("\n[auto-parallelize] check_fn(context, Method: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid),
+            println!("\n[auto_parallelise] check_fn(context, Method: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid),
 
             // |x, y| body
             FnKind::Closure(_body) =>
-            println!("\n[auto-parallelize] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", _body, _fndecl, _span, _nodeid),
+            println!("\n[auto_parallelise] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", _body, _fndecl, _span, _nodeid),
         }
         self.save();
     }
@@ -62,11 +85,11 @@ impl EarlyLintPass for AutoParallelise {
             self.save();
             match self.compiler_stage {
                 CompilerStage::Analysis => {
-                    println!("[auto-parallelize] Recompile to apply parallelization modifications");
+                    println!("[auto_parallelise] Recompile to apply parallelization modifications");
                     ::std::process::exit(1);
                 },
                 CompilerStage::Modification => {
-                    println!("[auto-parallelize] Parallelized compilation complete");
+                    println!("[auto_parallelise] parallelised compilation complete");
                     self.delete();
                 },
             }

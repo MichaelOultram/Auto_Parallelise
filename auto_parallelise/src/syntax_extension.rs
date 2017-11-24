@@ -3,10 +3,17 @@ use syntax::ptr;
 use syntax::ast::{self, ItemKind};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
 use syntax_pos::symbol::Symbol;
+
 use AutoParallelise;
+use CompilerStage;
 
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, _ecx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
+        // Only make changes when on the Modification stage
+        if self.compiler_stage != CompilerStage::Modification {
+            return vec![_item];
+        }
+
         //println!("\n[auto-parallelize] expand(_ecx, {:?}, {:?}, {:?})", _span, _meta_item, _item);
         let item2;
         if let Annotatable::Item(ref item) = _item {
