@@ -28,28 +28,35 @@
 \section{Introduction}
 \textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. One solution to this problem, which is the focus of this paper, is to automatically transform sequential source code into parallelised code. This solution, if achieved, would allow for existing (open-source) sequential programs to take advantage of the new hardware. It would also make developing new programs easier for programmers, as they can just write the easier sequential code and let the compiler make it run in parallel.
 
-Section \ref{sec:related-work} examines existing implementations by other authors and finds that most solutions focus on unsafe languages like C++ and FORTRAN. Since a significant proportion of existing programs are written in these languages \todo{source?}, it makes sense for other authors to focus on these languages. There is a downside to focusing on these unsafe languages, dependency analysis becomes much more difficult. Because of this, the design aspects of this paper will use the safe programming language rust. ``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to Rust will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
+Section \ref{sec:related-work} examines existing implementations by other authors and finds that most solutions focus on unsafe languages like C++ and FORTRAN. Since a significant proportion of existing programs are written in these languages \todo{source?}, it makes sense for other authors to focus on these languages. There is a downside to focusing on these unsafe languages, dependency analysis becomes much more difficult. Because of this, the design aspects of this paper will use the safe programming language rust.
 
-\todo{Explain the Rust language syntax and memory model}
+``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to Rust will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
+
+\todo{Briefly explain the Rust language syntax and memory model}
 
 \section{Related Work}
 \label{sec:related-work}
 \todo{Write up and cleanup. Also read the papers}
-\todo{Include \textcite{Zhong2008} somewhere}
+
+For the parallelisation models part we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. Speculative parallelism \todo{finish sentence}.
+
+For the parallelisation implementations part \todo{finish sentence}.
 
 \subsection{Parallelisation Models}
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
-\textcite{Feautrier1992,Feautrier1992b} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities.
-%\textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed on the source code to minimise the communication between threads, further increasing the performance of the parallelise
+\textcite{Feautrier1992,Feautrier1992a} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities. Finding a solution where these linear inequalities hold produces a schedule for the program where dependent statements are executed in order. There are some programs where no affine schedule exists.
+\textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed to minimise the communication between threads, further increasing the performance of the parallelise.
 
 % Iteration space slicing > affine transformations
-A different method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. \todo{Describe iteration space slicing}
-\textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than Affine Transformation Framework.
+A different method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. ``Iteration space slicing takes dependency information as input to find all statement instances from a given loop nest which must be executed to produce the correct result''. \textcite{Pugh1997} shows how this information can be used to transform loops on example programs to produce a real world speedup. \textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than affine scheduling.
 
 \subsubsection{Speculative parallelism}
 % Third option: Speculation
-\textcite{Prabhu2010} provides an API for C\# to allow the programmer to specify areas of speculative parallelism.
+\textcite{Zhong2008} shows that some parallelisable optimisations are hidden in loops, such that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
+
+\textcite{Prabhu2010} provides an API for C\# to allow the programmer to manually specify areas of speculative parallelism.
+
 \textcite{Yiapanis2015} moves this into the compiler.
 
 \subsection{Parallelisation Implementations}
@@ -70,9 +77,9 @@ GPUs are another focus due to their number of threads.
 
 \section{Problem Details}
 \label{sec:problem-details}
-\todo{Write about what exactly I want to parallelise. Which methods from the literature am I following and why? Include what Rust is, what plugins can do in this section}
+\todo{Which methods from the literature am I following and why?}
 
-The literature focuses on unsafe languages such as C/C++ and FORTRAN and as a result, most of their methods revolve around understanding conflicts between iterations. Due to the different memory model in Rust, the dependency information that the literature's approaches tried to gather is readily available.
+The literature focuses on unsafe languages such as C/C++ and FORTRAN. As a result, most of their methods revolve around understanding conflicts between statements/loop iterations. Due to the different memory model in Rust, the dependency information that the literature's approaches tried to gather is more readily available.
 
 The Rust compiler allows for plugins of different types but there are two types that are of interest to this problem. Written in the order of execution, they are:
 \begin{itemize}
@@ -80,7 +87,7 @@ The Rust compiler allows for plugins of different types but there are two types 
     \item Early Lint Pass: can see abstract syntax tree of each uncompiled function, with macros expanded, without annotations, but it cannot edit them.
 \end{itemize}
 
-To automate the parallelisation of Rust programs, the process must be manually to understand the problem. Below are some examples of sequential code and their manually calculated optimisations that could be automated using a Rust compiler plugin. They are ordered based on their complexity.
+To automate the parallelisation of Rust programs, the process must be manually to understand the problem. This section looks at some examples of sequential rust code and their manually calculated optimisations. To simplify the explanation of how a sequential program could be parallelised, threads are used as if they have no overhead. In reality this is not the case and so in \autoref{sec:design}, where this process is automated using a Rust compiler plugin, \texttt{thread::spawn} is replaced with something more optimal.
 
 \todo{For optimisations: Describe what is slow and what is required for optimisation. Good example sequential and parallel. Explain why/when faster (i.e. long list). Bad example of sequential. Explain why it cannot be converted}
 
@@ -354,6 +361,7 @@ fn slow_if(a: u32, b: u32) {
 \end{algorithm}
 
 \section{Design Overview}
+\label{sec:design}
 A typical parallelising compiler, such as those described in \autoref{sec:related-work}, have a few stages. First the compiler looks at each statement of the source code, and perform dependency analysis to calculate the critical path. Any independent statements can be run in parallel. A scheduling algorithm calculates which order the statements are executed, grouping statements that are dependent on each other into the same task. A compile time performance metric is used on each task to estimate the potential speedup of the parallel version over the sequential version. Due to the overhead of threads, this potential speedup would not actually be achieved. The parallelising compiler takes this into account and will only use the parallel version if it predicts it will really be faster.
 
 This papers design takes elements from a typical parallelising compiler, dividing the task into two main stages, an analysis stage and a modification stage.
@@ -386,6 +394,7 @@ To modify the sample programs to use the no-queue thread-pool would be of minima
 
 % TODO: Equalising
 %\newpage
-%\enlargethispage{-100mm}
-\printbibliography
+%\enlargethispage{-55mm}
+\section{References}
+\printbibliography[heading=none]
 \end{document}
