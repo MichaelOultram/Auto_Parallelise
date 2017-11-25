@@ -28,21 +28,49 @@
 \section{Introduction}
 \textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. One solution to this problem, which is the focus of this paper, is to automatically transform sequential source code into parallelised code. This solution, if achieved, would allow for existing (open-source) sequential programs to take advantage of the new hardware. It would also make developing new programs easier for programmers, as they can just write the easier sequential code and let the compiler make it run in parallel.
 
-Section \ref{sec:related-work} examines existing implementations by other authors and finds that most solutions focus on unsafe languages like C++ and FORTRAN. Since a significant proportion of existing programs are written in these languages \todo{source?}, it makes sense for other authors to focus on these languages. There is a downside to focusing on these unsafe languages, dependency analysis becomes much more difficult. Because of this, the design aspects of this paper will use the safe programming language rust.
+Section \ref{sec:related-work} examines existing implementations by other authors and finds that most solutions focus on unsafe languages like C++ and FORTRAN. Since a significant proportion of existing programs are written in these languages, it makes sense for other authors to focus on these languages. \todo{source?} There is a downside to focusing on these unsafe languages, dependency analysis becomes much more difficult. Because of this, the design aspects of this paper will use the safe programming language rust.
 
-``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to Rust will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
+``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to some of Rust's features will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
 
-\todo{Briefly explain the Rust language syntax and memory model}
+In C++ (or other unsafe languages), a variable can be accessed and modified if it is in scope. In rust, each variable is immutable by default and if a variable is passed to another function, then that function takes `ownership' of the variable.
+
+\begin{minted}{rust}
+fn main() {
+    let mut i = vec![1,2,3];
+    f(i);
+    g(i);
+}
+\end{minted}
+
+The code above would not compile in rust, but similar code would compile in C++. When \texttt{f} is called, it takes ownership of the variable \texttt{i}. This essentially moves it out of scope, and so it cannot be moved into \texttt{g}. Instead of moving the ownership of \texttt{i} to \texttt{f}, we could let \texttt{f} `borrow' the variable.
+
+\begin{minted}{rust}
+fn main() {
+    let mut i = vec![1,2,3];
+    f(&mut i);
+    g(&i);
+}
+\end{minted}
+
+In this example which does compile, variable \texttt{i} is `mutably borrowed' by \texttt{f}, and then `immutably borrowed' by \texttt{g}. The syntax of rust makes it explicit that \texttt{f} may modify this variable and \texttt{g} cannot. This information expressed is available to the compiler. If we did not want to modify the types of \texttt{f} and \texttt{g}, we could clone \texttt{i} instead.
+
+\begin{minted}{rust}
+fn main() {
+    let mut i = vec![1,2,3];
+    let j = i.clone();
+    f(i);
+    g(j);
+}
+\end{minted}
+
+In this example, we make a copy of \texttt{i} before moving it to \texttt{f}. Any changes that \texttt{f} makes to \texttt{i} will not be transferred to \texttt{g}, unlike the previous example. Note: \texttt{i} must be cloned before moving \texttt{i} to \texttt{f}, or else we would not have access to \texttt{i} to clone it.
 
 \section{Related Work}
 \label{sec:related-work}
-\todo{Write up and cleanup. Also read the papers}
-
-For the parallelisation models part we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. Speculative parallelism \todo{finish sentence}.
-
-For the parallelisation implementations part \todo{finish sentence}.
 
 \subsection{Parallelisation Models}
+In this part, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimise the memory access patterns and increase parallelising performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel thread is `undone' and rerun.
+
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
 \textcite{Feautrier1992,Feautrier1992a} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities. Finding a solution where these linear inequalities hold produces a schedule for the program where dependent statements are executed in order. There are some programs where no affine schedule exists.
@@ -55,11 +83,14 @@ A different method to affine scheduling is iteration space slicing introduced by
 % Third option: Speculation
 \textcite{Zhong2008} shows that some parallelisable optimisations are hidden in loops, such that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
 
+\todo{Finish}
 \textcite{Prabhu2010} provides an API for C\# to allow the programmer to manually specify areas of speculative parallelism.
 
 \textcite{Yiapanis2015} moves this into the compiler.
 
 \subsection{Parallelisation Implementations}
+In this part \todo{finish sentence}.
+
 \textcite{DHollander1998} converts FORTRAN and DO loops.
 \textcite{Eigenmann1998} parallelises benchmarks using FORTRAN.
 
@@ -391,6 +422,7 @@ As the task queue is the main cause of this deadlock, it is removed from this ne
 To modify the sample programs to use the no-queue thread-pool would be of minimal work; it would require a shared memory space (to gain access to the threads) and instead of calling \texttt{thread::spawn}, it would call another function.
 
 \subsubsection{Performance Analysis}
+\todo{Write this section}
 
 % TODO: Equalising
 %\newpage
