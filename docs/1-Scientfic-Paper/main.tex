@@ -69,7 +69,8 @@ In this example, we make a copy of \texttt{i} before moving it to \texttt{f}. An
 \label{sec:related-work}
 
 \subsection{Parallelisation Models}
-In this part, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimise the memory access patterns and increase parallelising performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel thread is `undone' and rerun.
+\label{sec:related-models}
+In this section, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimise the memory access patterns and increase parallelising performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel thread is `undone' and rerun.
 
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
@@ -83,25 +84,29 @@ A different method to affine scheduling is iteration space slicing introduced by
 % Third option: Speculation
 \textcite{Zhong2008} shows that some parallelisable optimisations are hidden in loops, such that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
 
-\todo{Finish}
-\textcite{Prabhu2010} provides an API for C\# to allow the programmer to manually specify areas of speculative parallelism.
-
-\textcite{Yiapanis2015} moves this into the compiler.
+\textcite{Prabhu2010} introduce two new language constructs for C\# to allow the programmer to manually specify areas of the program that can be speculatively parallelised. \textcite{Yiapanis2015} designs a parallelising compiler which can take advantage of speculative parallelism.
 
 \subsection{Parallelisation Implementations}
-In this part \todo{finish sentence}.
+In this section we look at some of the implemented parallelising compilers based off of the models described in Section \ref{sec:related-models}. The first subsection is for the the implementations which parallelise FORTRAN programs. The second subsection is for OpenMP which is an model for shared memory programming. The final subsection is for the implementations which convert sequential C code into parallelised CUDA code suitable for running on a GPU.
 
-\textcite{DHollander1998} converts FORTRAN and DO loops.
-\textcite{Eigenmann1998} parallelises benchmarks using FORTRAN.
+\todo{Reread the intro above after finishing the section}
 
-\textcite{Rauchwerger1999} uses FORTRAN speculatively on for loops.
-\textcite{Quinones2005} uses speculation and iteration space slicing together.
+\subsubsection{FORTRAN}
+\textcite{Eigenmann1998} manually parallelises the PERFECT benchmarks for FORTRAN. which are compared with the original versions to calculate the potential speedup of an automatic parallelising compiler.
 
+\textcite{DHollander1998} developed a FORTRAN transformer which reconstructs code using GOTO statements so that more parallelisms can be detected, performs dependency analysis and automatically parallelised loops. Jobs can be split between networked machines to increase performance further.
+
+\textcite{Rauchwerger1999} introduce a new language construct which allows for FORTRAN programs which allows for run-time speculative parallelism on for loops.
+
+\textcite{Quinones2005} introduce the Mitosis compiler which combines speculation with iteration space slicing.
+
+\subsubsection{OpenMP}
 OpenMP is a programming interface for shared memory programming.
 \textcite{Dagum1998} compares OpenMP to alterative parallel programming models.
 \textcite{Kim2000} converts FORTRAN using OpenMP automatically.
 \textcite{Lam2011} extends OpenMP using machine learning to automate the parallelisation.
 
+\subsubsection{CUDA}
 GPUs are another focus due to their number of threads.
 \textcite{Baskaran2010} have converted C-to-CUDA.
 \textcite{Verdoolaege2013} generates CUDA code using the Polyhedral model.
@@ -119,8 +124,6 @@ The Rust compiler allows for plugins of different types but there are two types 
 \end{itemize}
 
 To automate the parallelisation of Rust programs, the process must be manually to understand the problem. This section looks at some examples of sequential rust code and their manually calculated optimisations. To simplify the explanation of how a sequential program could be parallelised, threads are used as if they have no overhead. In reality this is not the case and so in \autoref{sec:design}, where this process is automated using a Rust compiler plugin, \texttt{thread::spawn} is replaced with something more optimal.
-
-\todo{For optimisations: Describe what is slow and what is required for optimisation. Good example sequential and parallel. Explain why/when faster (i.e. long list). Bad example of sequential. Explain why it cannot be converted}
 
 \subsection{Parallel Function Optimisations}
 In some cases the arguments of a function are known well before the result of the function is required. In sequential programs, only one function is executed at once and so when the result is required, the program switches to that function. This function could be started in the background as soon as the arguments are decided if the program was parallelised. This would allow the result to be ready for when it is requested or at least closer to ready than the pure sequential code.
@@ -340,15 +343,13 @@ fn crack_password(dictionary: &Vec<String>,
 \end{algorithm}
 
 \subsection{Branch Optimisations}
-In the previous optimisations, all the code that is run in parallel would have be run in sequential normally. This optimisation is for \texttt{if} statements which have a very slow condition. Each side of the branch is run in parallel, and then when the condition is finally worked out, the correct branch is kept. This concept can be expanded for when there are multiple branches such as \texttt{match} statements.
-
-\todo{Code Examples}
+In the previous optimisations, all the code that is run in parallel would have be run in sequential normally. This optimisation is for \texttt{if} statements which have a very slow condition, as shown by \autoref{code:seq-slowif}. Each side of the branch could be run in parallel whilst waiting for the condition. When the condition is finally calculated, the result of the correct branch is kept. \autoref{code:par-slowif} shows this optimisation applied to \autoref{code:seq-slowif}.
 
 \begin{algorithm}
 \caption{Sequential Slow If}
 \label{code:seq-slowif}
 \begin{minted}{rust}
-fn slow_if(a: u32, b: u32) {
+fn f(a: u32, b: u32) -> u32 {
     if slow_condition(a, b) {
         let c = b - a;
         (a * c) + 5
@@ -364,7 +365,7 @@ fn slow_if(a: u32, b: u32) {
 \caption{Parallel Slow If}
 \label{code:par-slowif}
 \begin{minted}{rust}
-fn slow_if(a: u32, b: u32) {
+fn f(a: u32, b: u32) -> u32 {
     let true_branch = {
         let a = a.clone();
         let b = b.clone();
@@ -391,25 +392,24 @@ fn slow_if(a: u32, b: u32) {
 \end{minted}
 \end{algorithm}
 
+This concept can be expanded for when there are multiple branches such as \texttt{match} statements. Ideally, if the incorrect branch is still being calculated in a thread, then this thread should be cancelled but I have not found a way to do this yet in rust.
+
 \section{Design Overview}
 \label{sec:design}
 A typical parallelising compiler, such as those described in \autoref{sec:related-work}, have a few stages. First the compiler looks at each statement of the source code, and perform dependency analysis to calculate the critical path. Any independent statements can be run in parallel. A scheduling algorithm calculates which order the statements are executed, grouping statements that are dependent on each other into the same task. A compile time performance metric is used on each task to estimate the potential speedup of the parallel version over the sequential version. Due to the overhead of threads, this potential speedup would not actually be achieved. The parallelising compiler takes this into account and will only use the parallel version if it predicts it will really be faster.
 
-This papers design takes elements from a typical parallelising compiler, dividing the task into two main stages, an analysis stage and a modification stage.
-
-\todo{Describe how I will use the features of Rust plugins}
-
-The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. Analysis stage must come before the modification stage, so compiling is done twice (once for each stage).
-
-When the plugin is loaded, it determines which stage it is by looking for a .autoparallelise file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded into a struct using the `serde\_json' crate and the stage is updated to be the modification stage.
+This papers design takes elements from a typical parallelising compiler, dividing the task into two main stages, an analysis stage and a modification stage. The analysis stage is run by the linter and the modification stage is run by the syntax extension plugin. Analysis stage must come before the modification stage, so compiling must be done twice (once for each stage).
+When the plugin is loaded, it determines which stage it is by looking for a shared JSON file. If this file does not exist, then it is the analysis stage. If the file does exist, the files content is loaded and the stage is updated to be the modification stage.
 
 \subsection{Analysis stage}
 On the first compilation, the syntax extension plugin would do nothing. The linter plugin would view the entire abstract data tree and analyse what each statement depends on and modifies. This would create a dependency tree, where any two statements that are independent can be run in parallel. The linter plugin would use this dependency tree to determine which parts should be parallelised, and save this information to a file.
 
-Detecting the end of the analysis stage required some work.
+\todo{Expand}
+
+%Detecting the end of the analysis stage required some work.
 
 \subsection{Modification stage}
-On the second compilation, the syntax extension would be able to read the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The linter plugin would also be able to view this file, and it could produce compiler warnings for any function that could be parallelised that is missing an annotation.
+On the second compilation, the syntax extension would be able to read the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The linter plugin, when run for the second time, would also be able to view this file, and it could produce compiler warnings for any function that could be parallelised that is missing an annotation.
 
 \todo{Introduce these subsubsections}
 \subsubsection{Infinite Thread Problem}
