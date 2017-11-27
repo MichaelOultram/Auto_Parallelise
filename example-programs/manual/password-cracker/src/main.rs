@@ -56,17 +56,39 @@ fn crack_password(dictionary: &Vec<String>, hash_password: String) -> Option<Str
     None
 }
 
+fn crack_password_single(word: String, hash_password: String) -> bool {
+    // Hash word using Sha256
+    let mut hash_word: String = word.clone();
+    for _ in 0..40 {
+        let mut hasher = Sha256::new();
+        hasher.input_str(&hash_word);
+        hash_word = hasher.result_str();
+    }
+
+    // Check if hash matches
+    hash_password == hash_word
+}
+
 fn main() {
     let now = Instant::now();
 
     let dictionary = load_dictionary();
     let hash_password = format!("be9f36142cf64f3804323c8f29bc5822d01e60f7849244c59ff42de38d11fa37");
+    for word in dictionary {
+        if crack_password_single(word.clone(), hash_password.clone()) {
+            println!("Found password: {}", word);
+            break;
+        }
+    }
+
+    /*
     let password = crack_password(&dictionary, hash_password);
     match password {
         Some(word) => println!("Found password: {}", word),
         None => println!("Could not find password"),
     }
-
+    */
+    println!("Done");
     let elapsed = now.elapsed();
     let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
     println!("Seconds: {}", sec);
