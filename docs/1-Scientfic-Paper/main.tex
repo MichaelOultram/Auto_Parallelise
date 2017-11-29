@@ -25,17 +25,17 @@
   Processors have been gaining more multi-core performance which sequential code cannot take advantage of. Many solutions exist to this problem including automatic parallelisation at the binary level, automatic parallelisation at the compiler and manually parallelising using annotations. The potential benefits of solving this problem are increased performance for existing programs, as well as making development of new software easier (as programmers do not need to worry about writing parallelised code).
 
   This paper focuses on automatically converting sequential source code into a parallelised program. The literature is explored and presenting into two main areas: theoretical models of automatic parallelisation and existing real-world parallelising compilers.
-  The author presents a design for a new parallelising compiler for the rust programming language. Three sequential elements of Rust programs are manually converted by this paper.
+  The author presents a design for a new parallelising compiler for the Rust programming language. To demonstrate the design, three sequential elements of Rust programs are manually converted by this paper: function calls, for-loops and branches.
 \end{abstract}
 
 \section{Introduction}
-\textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. One solution to this problem, which is the focus of this paper, is to automatically transform sequential source code into parallelised code. This solution, if achieved, would allow for existing (open-source) sequential programs to take advantage of the new hardware. It would also make developing new programs easier for programmers, as they can just write the easier sequential code and let the compiler make it run in parallel.
+\textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. One solution to this problem, which is the focus of this paper, is to automatically transform sequential source code into parallelised code. This solution, if achieved, would allow for existing uncompiled sequential programs to take advantage of the new hardware. Developing new programs would be easier for programmers as they can just write the code sequentially and let the compiler parallelise it.
 
-Section \ref{sec:related-work} examines existing implementations by other authors and finds that most solutions focus on unsafe languages like C++ and FORTRAN. Since a significant proportion of existing programs are written in these languages, it makes sense for other authors to focus on these languages. \todo{source?} There is a downside to focusing on these unsafe languages, dependency analysis becomes much more difficult. Because of this, the design aspects of this paper will use the safe programming language rust.
+Section \ref{sec:related-work} examines the literature to finds that most existing solutions focus on unsafe languages such as C++ and FORTRAN. Since a significant proportion of existing programs are written in these languages, it makes sense for other authors to focus on these languages. There is a downsides to focusing on these unsafe languages, dependency analysis becomes much more difficult. To avoid this downside, the design this paper introduces in \autoref{sec:design} uses the safe programming language Rust.
 
 ``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. This brief introduction to some of Rust's features will explain the elements of the language necessary for the reader to understand for later sections of this paper. For further understanding of the language, it is recommended that the reader looks at \textcite{rustbook}.
 
-In C++ (or other unsafe languages), a variable can be accessed and modified if it is in scope. In rust, each variable is immutable by default and if a variable is passed to another function, then that function takes `ownership' of the variable.
+In C++ (or other unsafe languages), a variable can be accessed and modified if it is in scope. In Rust, each variable is immutable by default and if a variable is passed to another function, then that function takes `ownership' of the variable. The code below would not compile in Rust, but similar code would compile in C++. When \texttt{f} is called, it takes ownership of the variable \texttt{i}. This essentially moves it out of scope, and so it cannot be moved into \texttt{g}.
 
 \begin{minted}{rust}
 fn main() {
@@ -45,7 +45,7 @@ fn main() {
 }
 \end{minted}
 
-The code above would not compile in rust, but similar code would compile in C++. When \texttt{f} is called, it takes ownership of the variable \texttt{i}. This essentially moves it out of scope, and so it cannot be moved into \texttt{g}. Instead of moving the ownership of \texttt{i} to \texttt{f}, we could let \texttt{f} `borrow' the variable.
+To make the code above compile, we have two options. The first option is to let \texttt{f} `borrow' the variable instead of moving the ownership of \texttt{i} to \texttt{f}. In the example below, variable \texttt{i} is `mutably borrowed' by \texttt{f}, and then `immutably borrowed' by \texttt{g}. The syntax of Rust makes it explicit that \texttt{f} may modify this variable and \texttt{g} cannot. This information expressed is available to the compiler.
 
 \begin{minted}{rust}
 fn main() {
@@ -55,7 +55,7 @@ fn main() {
 }
 \end{minted}
 
-In this example which does compile, variable \texttt{i} is `mutably borrowed' by \texttt{f}, and then `immutably borrowed' by \texttt{g}. The syntax of rust makes it explicit that \texttt{f} may modify this variable and \texttt{g} cannot. This information expressed is available to the compiler. If we did not want to modify the types of \texttt{f} and \texttt{g}, we could clone \texttt{i} instead.
+The second option is to clone \texttt{i} instead. This would keep the types of \texttt{f} and \texttt{g} the same as the first example. In the example below, we make a copy of \texttt{i} before moving it to \texttt{f}. Any changes that \texttt{f} makes to \texttt{i} will not be transferred to \texttt{g}, unlike the previous example.
 
 \begin{minted}{rust}
 fn main() {
@@ -66,7 +66,7 @@ fn main() {
 }
 \end{minted}
 
-In this example, we make a copy of \texttt{i} before moving it to \texttt{f}. Any changes that \texttt{f} makes to \texttt{i} will not be transferred to \texttt{g}, unlike the previous example. Note: \texttt{i} must be cloned before moving \texttt{i} to \texttt{f}, or else we would not have access to \texttt{i} to clone it.
+Note: \texttt{i} must be cloned before moving \texttt{i} to \texttt{f}, or else we would not have access to \texttt{i} to clone it.
 
 %\newpage
 \section{Related Work}
@@ -74,41 +74,41 @@ In this example, we make a copy of \texttt{i} before moving it to \texttt{f}. An
 
 \subsection{Parallelisation Models}
 \label{sec:related-models}
-In this section, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimise the memory access patterns and increase parallelising performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel thread is `undone' and rerun.
+In this section, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimising memory access patterns for multiple threads can increase performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel thread is `undone' and rerun.
 
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
 \textcite{Feautrier1992,Feautrier1992a} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities. Finding a solution where these linear inequalities hold produces a schedule for the program where dependent statements are executed in order. There are some programs where no affine schedule exists.
-\textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed to minimise the communication between threads, further increasing the performance of the parallelise.
+\textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed to minimise the communication between threads, further increasing the performance of the parallelised code.
 
 % Iteration space slicing > affine transformations
-A different method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. ``Iteration space slicing takes dependency information as input to find all statement instances from a given loop nest which must be executed to produce the correct result''. \textcite{Pugh1997} shows how this information can be used to transform loops on example programs to produce a real world speedup. \textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than affine scheduling.
+An alternative method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. ``Iteration space slicing takes dependency information as input to find all statement instances from a given loop nest which must be executed to produce the correct result''. \textcite{Pugh1997} shows how this information can be used to transform loops on example programs to produce a real world speedup. \textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than affine scheduling.
 
 \subsubsection{Speculative parallelism}
 % Third option: Speculation
-\textcite{Zhong2008} shows that some parallelisable optimisations are hidden in loops, such that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
+\textcite{Zhong2008} shows that there is some parallelisable parts hidden in loops that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that same location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
 
-\textcite{Prabhu2010} introduce two new language constructs for C\# to allow the programmer to manually specify areas of the program that can be speculatively parallelised. \textcite{Yiapanis2015} designs a parallelising compiler which can take advantage of speculative parallelism.
+\textcite{Prabhu2010} introduce two new language constructs for C\# to allow the programmer to manually specify areas of the program that can be speculatively parallelised. \textcite{Yiapanis2015} designs a parallelising compiler which can automatically take advantage of speculative parallelism.
 
 \subsection{Parallelisation Implementations}
-In this section we look at some of the implemented parallelising compilers based off of the models described in Section \ref{sec:related-models}. This includes parallelising compilers which focus on parallelising FORTRAN programs; OpenMP which is an model for shared memory programming and parallelising compilers which convert sequential CPU code into parallelised GPU code.
+In this section we look at: parallelising compilers which focus on parallelising FORTRAN programs; OpenMP which is an model for shared memory programming and parallelising compilers which convert sequential CPU code into parallelised GPU code. Some of these parallelising compilers are based off of models described in \autoref{sec:related-models}.
 
-\textcite{Eigenmann1998} manually parallelises the PERFECT benchmarks for FORTRAN. which are compared with the original versions to calculate the potential speedup of an automatic parallelising compiler.
-\textcite{DHollander1998} developed a FORTRAN transformer which reconstructs code using GOTO statements so that more parallelisms can be detected, performs dependency analysis and automatically parallelised loops. Jobs can be split between networked machines to increase performance further.
-\textcite{Rauchwerger1999} introduce a new language construct for FORTRAN programs which allows for run-time speculative parallelism on for loops. \todo{PERFECT benchmarks}
+\textcite{Eigenmann1998} manually parallelises the PERFECT benchmarks for FORTRAN which are compared with the original versions to calculate the potential speedup of an automatic parallelising compiler.
+\textcite{DHollander1998} developed a FORTRAN transformer which reconstructs code using \texttt{GOTO} statements so that more parallelisms can be detected. It performs dependency analysis and automatically parallelised loops by splitting the task into jobs. These jobs can be split between networked machines to run more jobs concurrently.
+\textcite{Rauchwerger1999} introduce a new language construct for FORTRAN programs which allows for run-time speculative parallelism on for loops. Their implementation parallelises some parts of the PERFECT benchmarks which existing parallelising compilers of the time could not find.
 
 \textcite{Quinones2005} introduce the Mitosis compiler which combines speculation with iteration space slicing. \todo{Finish}
 
-\textcite{Dagum1998} introduces a programming interface for shared memory multiprocessors called OpenMP targeted at FORTRAN, C and C++. The programmer annotates the elements of the program that are parallelisable, which the compiler recognises and performs the optimisation. \textcite{Dagum1998} compares OpenMP to alterative parallel programming models.
-\textcite{Kim2000} introduces the ICP-PFC compiler for FORTRAN. All loops in the source code are analysed by calculated a dependency matrix. The compiler automatically adds the relevant OpenMP annotations to the loop.
+\textcite{Dagum1998} introduces a programming interface for shared memory multiprocessors called OpenMP targeted at FORTRAN, C and C++. The programmer annotates the elements of the program that are parallelisable, which the compiler recognises and performs the optimisation. OpenMP is compared to alterative parallel programming models.
+\textcite{Kim2000} introduces the ICP-PFC compiler for FORTRAN which uses the OpenMP model. All loops in the source code are analysed by calculated a dependency matrix. The compiler automatically adds the relevant OpenMP annotations to the loop.
 \textcite{Lam2011} extends OpenMP using machine learning to automate the parallelisation. The system is trained using a set containing programs already parallelised using OpenMP. The knowledge learned is applied to sequential programs to produce parallelised programs.
 
-A CPUs architecture is typically optimised for latency whereas a GPUs architecture is typically optimised for throughput. This can make GPUs perform much better that CPUs for a certain type of task. \textcite{Baskaran2010} uses the affine transformation model to convert sequential C code into parallelised CUDA code. For loops are tiled such that they can be executed efficiently on the GPU.
+A CPUs architecture is typically optimised for latency whereas a GPUs architecture is typically optimised for throughput. This can make GPUs perform much better that CPUs for a certain type of task. \textcite{Baskaran2010} uses the affine transformation model to convert sequential C code into parallelised CUDA code. \texttt{For} loops are tiled for efficient execution on the GPU.
 
 \newpage
 \section{Problem Details}
 \label{sec:problem-details}
-The literature focuses on unsafe languages such as C/C++ and FORTRAN. As a result, most of their methods revolve around understanding conflicts between statements/loop iterations. Due to the different memory model in Rust, the dependency information that the literature's approaches tried to gather is more readily available.
+The literature focuses on unsafe languages such as C/C++ and FORTRAN. As a result, most of their methods revolve around understanding conflicts between statements/loop iterations of complex code. Since memory in Rust has `ownership', this dependency information is more readily available.
 
 The Rust compiler allows for plugins of different types but there are two types that are of interest to this problem. Written in the order of execution, they are:
 \begin{itemize}
@@ -116,7 +116,7 @@ The Rust compiler allows for plugins of different types but there are two types 
     \item Early Lint Pass: can see abstract syntax tree of each uncompiled function, with macros expanded, without annotations, but it cannot edit them.
 \end{itemize}
 
-To automate the parallelisation of Rust programs, the process must be manually to understand the problem. This section looks at some examples of sequential rust code and their manually calculated optimisations. To simplify the explanation of how a sequential program could be parallelised, threads are used as if they have no overhead. In reality this is not the case and so in \autoref{sec:design}, where this process is automated using a Rust compiler plugin, \texttt{thread::spawn} is replaced with something more optimal.
+Before we can automate the parallelisation of Rust programs, we must look at some example programs to fully understand the problem. The examples were written sequentially and then manually parallelised. In this section threads are used as if they have no overhead, to simplify the explanation of how a sequential program could be parallelised. In reality this is not the case and so in \autoref{sec:design} \texttt{thread::spawn} is replaced with something more optimal.
 
 \subsection{Parallel Function Optimisations}
 In some cases the arguments of a function are known well before the result of the function is required. In sequential programs, only one function is executed at once and so when the result is required, the program switches to that function. This function could be started in the background as soon as the arguments are decided if the program was parallelised. This would allow the result to be ready for when it is requested or at least closer to ready than the pure sequential code.
@@ -385,7 +385,7 @@ fn f(a: u32, b: u32) -> u32 {
 \end{minted}
 \end{algorithm}
 
-This concept can be expanded for when there are multiple branches such as \texttt{match} statements. Ideally, if the incorrect branch is still being calculated in a thread, then this thread should be cancelled.
+This concept can be expanded for when there are multiple branches such as \texttt{match} statements. Ideally, if the incorrect branch is still being calculated in a thread, then this thread should be cancelled, which is not easily achievable in Rust. This type of parallel optimisation will most likely be left out of the final implementation and should be seen as a possible extension rather than a necessary design feature.
 
 \section{Design Overview}
 \label{sec:design}
