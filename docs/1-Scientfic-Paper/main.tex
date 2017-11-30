@@ -78,7 +78,7 @@ In this section, we look at theoretical models of automatic parallelism. The sta
 
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
-\textcite{Feautrier1992,Feautrier1992a} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities. Finding a solution where these linear inequalities hold produces a schedule for the program where dependent statements are executed in order. There are some programs where no affine schedule exists.
+\textcite{Feautrier1992} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities. Finding a solution where these linear inequalities hold produces a schedule for the program where dependent statements are executed in order. There are some programs where no affine schedule exists.
 \textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed to minimise the communication between threads, further increasing the performance of the parallelised code.
 
 % Iteration space slicing > affine transformations
@@ -395,25 +395,33 @@ fn f(a: u32, b: u32) -> u32 {
 
 \section{Design Overview}
 \label{sec:design}
-A typical parallelising compiler, such as those described in \autoref{sec:related-work}, have a few stages. First the compiler looks at each statement of the source code, and performs dependency analysis to calculate the critical path. Any independent statements can be run in parallel. A scheduling algorithm calculates which order the statements are executed, grouping statements that are dependent on each other into the same task. A compile time performance metric is used on each task to estimate the potential speedup of the parallel version over the sequential version. Due to the overhead of threads, this potential speedup would not actually be achieved. The parallelising compiler takes this into account and will only use the parallel version if it predicts it will really be faster.
+A typical parallelising compiler, such as those described in \autoref{sec:related-work}, have a few stages. First the compiler looks at each statement of the source code, and performs dependency analysis to calculate the critical path. Any independent statements can be run in parallel. A scheduling algorithm calculates which order the statements should be executed, grouping statements that are dependent on each other into the same task. A compile time performance metric is used on each task to estimate the potential speedup of the parallel version over the sequential version. Due to the overhead of threads, this potential speedup would not actually be achieved. The parallelising compiler takes this into account and will only use the parallel version if it predicts it will really be faster.
 
 This papers design takes elements from a typical parallelising compiler, dividing the task into two main stages, an analysis stage and a modification stage. The analysis stage is run by a linter plugin and the modification stage is run by a syntax extension plugin. Analysis stage must come before the modification stage, so compiling must be done twice (once for each stage).
 When the plugin is loaded, it determines which stage it is by looking for a shared JSON file. If this file does not exist, then it is the analysis stage, otherwise the file's content is loaded and the stage is updated to be the modification stage.
 
 \subsection{Analysis stage}
-On the first compilation, the syntax extension plugin would do nothing. The linter plugin would view the entire abstract data tree and analyse what each statement depends on and modifies. This would create a dependency tree, where any two statements that are independent can be run in parallel. The linter plugin would use this dependency tree to determine which parts should be parallelised, and save this information to a file.
+On the first compilation, the syntax extension plugin would do nothing. The linter plugin would view the entire abstract data tree and analyse what each statement depends on and modifies. This would create a dependency tree, where any two statements that are independent can be run in parallel. The linter plugin would use this dependency tree to determine which parts should be parallelised, and save this information to a file. Some parts cannot be parallelised.
+
+\subsubsection{Side Effects}
+A pure function will return the same output if it is given the same input. If the function can return something different when given the same input, then it is not pure. The element of the function that changes the output is known as a side effect. The main side effect found in programs is IO. For example, a function takes a filename as input and outputs the contents of that file. If the contents of that file changes, the function would outputs something different even though its parameters are the same. Printing to standard out is also considered a side effect. Side effects generally cannot be parallelised, as the order of execution must be kept the same (we don't want to print in the wrong order). Additionally, everything that occurs before the side effect in the sequential version should also be run before the side effect in the parallel version.
+
+\begin{comment}
+The `ownership' memory model that Rust uses will help immensely with dependency analysis. Any variable will need to be cloned if they are going to be used in multiple threads at the same time. Mutable variables cannot be placed into separate threads, but immutable variables can.
+
+The linter plugin receives each function one at a time. It checks the function arguments for mutable references.
+
+Scans the function for any function calls. Adds them to a list of possible side effects. If the function has no side effects, and
+
 
 \todo{Expand}
-
-%Detecting the end of the analysis stage required some work.
+\end{comment}
 
 \subsection{Modification stage}
-On the second compilation, the syntax extension would be able to read the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The modifications applied would be similar to the sample programs shown in \autoref{sec:problem-details}. Those modifications assumed that threads have no overhead and were used as a method of describing how a sequential program could be run in parallel. In the real world, these parallelised sample programs produce an unreasonable amount of threads and most of the threads are just waiting for other threads to return. This synchronisation can cause the parallel version to perform a lot worse than sequential code. The following subsections describe some of the problems with the parallelised sample programs, and provides some solutions.
+On the second compilation, the syntax extension reads the file the linter plugin created on the previous compilation. This lists all the changes required and the syntax plugin can apply those changes to the abstract syntax tree function by function. The modifications applied would be similar to the sample programs shown in \autoref{sec:problem-details}. Those modifications assumed that threads have no overhead and were used as a method of describing how a sequential program could be run in parallel. In the real world, these parallelised sample programs produce an unreasonable amount of threads and most of the threads are just waiting for other threads to return. This synchronisation can cause the parallel version to perform a lot worse than sequential code. The following subsections describe some of the problems with the parallelised sample programs, and provides some solutions.
 
 \subsubsection{Infinite Thread Problem}
 The initial solution for too many threads is to use a thread-pool so only a fixed number of threads are executed at the same time. This solution would not work in this case as if all the threads are waiting on a future task, which is also waiting for a thread to be free then we get stuck in a deadlock. By tweaking the design of the thread-pool slightly, we can have a fixed the number of tasks and prevent this deadlock.
-
-\todo{Replace this with the new-new design?}
 
 As the task queue is the main cause of this deadlock, it is removed from this new proposed design which will be referred to as a no-queue thread-pool. Whenever a task is created, it looks for an available thread and that thread starts executing the task in the background. If there is no thread available, then the current thread should execute the task. Also, if the the current thread is waiting for a task to return, then it could execute another task whilst waiting.
 
@@ -424,9 +432,9 @@ Parallelising small tasks, or tasks that would require a lot of synchronisation 
 
 One possible solution is to run the sequential version in one thread, and the parallel version in the other threads. Which-ever version finishes first is used, and the other version is cancelled. This approach leaves the performance approach until run-time, but it is a very inefficient solution as the parallel version now has fewer threads.
 
-Another solution is to use some sort of performance metric at compile time to estimate which version will be faster. If we assume each statement takes one unit of execution time, we can attempt to calculate how many time units the sequential and parallel version will take. Since we know that there is an overhead to the parallel version, we should add on some extra time units. The faster version would be the version that is compiled. This solution would not really work as described as the execution time may be dependent on how many iterations of a loop (which isn't necessarily known at compile time). The parallel version is also dependent on the number of cores the machine has, also not known at compile time.
+Another solution is to use a performance metric at compile time to estimate which version will be faster. If we assume each statement takes one unit of execution time, we can attempt to calculate how many time units the sequential and parallel version will take. Since we know that there is an overhead to the parallel version, we should add on some extra time units. The faster version would be the version that is compiled. This solution would not really work as described as the execution time may be dependent on how many iterations of a loop (which isn't necessarily known at compile time). It is also dependent on the number of cores the machine has, also not known at compile time.
 
-The best solution is a combination of the previous two ideas. The compiler should create an function which estimates both the sequential and the parallel version execution time. This function can take in any run-time conditions i.e. the number of iterations of a loop or the number of cores the machine has. This function should be fast such that the overhead of calculating which version is faster should be negligible. At run-time, this function predicts the faster version using the run-time variables, and the faster version is the only version run.
+The best solution is a combination of the previous two ideas. The compiler should create an function which estimates both the sequential and the parallel version execution time. This function can take in any run-time conditions i.e. the number of iterations of a loop or the number of cores the machine has. This function should be fast such that the overhead of calculating which version is faster should be negligible. At run-time this function predicts the faster version using the run-time variables, and runs only that version.
 
 % TODO: Equalising
 %\newpage
