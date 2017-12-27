@@ -16,8 +16,9 @@ pub struct Function {
     pub output_type: Option<String>,
 }
 
+#[derive(Debug)]
 pub enum DependencyNode {
-    Expr(P<Stmt>, Vec<u32>), // Statement and Dependency indicies
-    Block(Option<P<Stmt>>, Vec<u32>, DependencyTree),
+    Expr(P<Stmt>, Vec<usize>), // Statement and Dependency indicies
+    Block(DependencyTree, Vec<usize>),
 }
 pub type DependencyTree = Vec<DependencyNode>;

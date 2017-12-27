@@ -1,5 +1,5 @@
 use rustc::lint::{LintArray, LintPass, EarlyContext, EarlyLintPass};
-use syntax::ast::{self, Block, Expr, ExprKind, StmtKind};
+use syntax::ast::{self, Block, Expr, ExprKind, Stmt, StmtKind};
 use syntax::ptr::P;
 use syntax_pos::Span;
 use syntax::visit::{self, FnKind};
@@ -15,6 +15,71 @@ impl LintPass for AutoParallelise {
     }
 }
 
+fn empty_block(block: &Block) -> P<Block> {
+    P(Block {
+        stmts: vec![],
+        id: block.id,
+        rules: block.rules,
+        span: block.span,
+    })
+}
+
+fn remove_blocks(stmt: &Stmt) -> P<Stmt> {
+    let mut output = stmt.clone();
+
+    // Extract the expression if there is one
+    {
+        let expr = match stmt.node {
+            StmtKind::Expr(ref expr) |
+            StmtKind::Semi(ref expr) => expr,
+            _ => return P(output),
+        };
+
+        // Check to see if the expression contains a block
+        let node = match expr.node {
+            ExprKind::If(ref a, ref block, ref c) =>
+            ExprKind::If(a.clone(), empty_block(block), c.clone()),
+
+            ExprKind::IfLet(ref a, ref b, ref block, ref c) =>
+            ExprKind::IfLet(a.clone(), b.clone(), empty_block(block), c.clone()),
+
+            ExprKind::While(ref a, ref block, ref c) =>
+            ExprKind::While(a.clone(), empty_block(block), c.clone()),
+
+            ExprKind::WhileLet(ref a, ref b, ref block, ref c) =>
+            ExprKind::WhileLet(a.clone(), b.clone(), empty_block(block), c.clone()),
+
+            ExprKind::ForLoop(ref a, ref b, ref block, ref c) =>
+            ExprKind::ForLoop(a.clone(), b.clone(), empty_block(block), c.clone()),
+
+            ExprKind::Loop(ref block, ref c) =>
+            ExprKind::Loop(empty_block(block), c.clone()),
+
+            ExprKind::Block(ref block) =>
+            ExprKind::Block(empty_block(block)),
+
+            ExprKind::Catch(ref block) =>
+            ExprKind::Catch(empty_block(block)),
+
+            ref x => x.clone(),
+        };
+
+        let expr2 = Expr {
+            id: expr.id,
+            node: node,
+            span: expr.span,
+            attrs: expr.attrs.clone(),
+        };
+
+        output.node = match stmt.node {
+            StmtKind::Expr(_) => StmtKind::Expr(P(expr2)),
+            StmtKind::Semi(_) => StmtKind::Semi(P(expr2)),
+            _ => panic!(),
+        };
+    }
+    P(output)
+}
+
 fn check_block(block: &Block) -> DependencyTree {
     let mut deptree: DependencyTree = vec![];
     for stmt in &block.stmts {
@@ -22,24 +87,27 @@ fn check_block(block: &Block) -> DependencyTree {
             // A local let ?
             StmtKind::Local(ref local) => {
                 if let Some(ref expr) = local.init {
-                    let node = DependencyNode::Expr(P(stmt.clone()), vec![]);
-                    deptree.push(node);
-                    check_expr(&mut deptree, &expr.deref());
+                    deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
+                    let node_id = deptree.len() - 1;
+                    let dep_strs = check_expr(&mut deptree, &expr.deref(), node_id);
+                    // TODO: Examine dep_strs to find the statement indicies
                 }
 
-                println!("Pat Attrs: {:?}", local.pat.node)
+                //println!("Pat Attrs: {:?}", local.pat.node)
             },
 
             // A line in a function
             StmtKind::Expr(ref expr) |
             StmtKind::Semi(ref expr) => {
-                let node = DependencyNode::Expr(P(stmt.clone()), vec![]);
-                deptree.push(node);
-                check_expr(&mut deptree, &expr.deref());
+                deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
+                let node_id = deptree.len() - 1;
+                let dep_strs = check_expr(&mut deptree, &expr.deref(), node_id);
+                // TODO: Examine dep_strs to find the statement indicies
+
             },
 
 
-            StmtKind::Item(ref item) => println!("{:?}", item),
+            StmtKind::Item(ref item) => println!("ITEM: {:?}", item),
 
             // Macros should be expanded by this point
             StmtKind::Mac(_) => unimplemented!(),
@@ -48,11 +116,8 @@ fn check_block(block: &Block) -> DependencyTree {
     deptree
 }
 
-fn check_expr(deptree: &mut DependencyTree, expr: &Expr) {
+fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<String> { // -> List of variables that is read/modified
     let subexprs: Vec<P<Expr>> = {
-        let node_id = deptree.len() - 1; // Last element in deptree is the current statement
-        let mut node = &mut deptree[node_id]; // Dependencies of expr should be added to this node
-        println!("expr.node: {:?}", expr.node);
         match expr.node {
             ExprKind::Box(ref expr1) |
             ExprKind::Unary(_, ref expr1) |
@@ -95,7 +160,8 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr) {
             ExprKind::If(ref expr1, ref block1, ref mexpr2) |
             ExprKind::IfLet(_, ref expr1, ref block1, ref mexpr2) => {
                 let subdeptree = check_block(block1);
-                // TODO: Use subdeptree
+                deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
+                // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 if let &Some(ref expr2) = mexpr2 {
                     vec![expr1.clone(), expr2.clone()]
                 } else {
@@ -107,7 +173,8 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr) {
             ExprKind::WhileLet(_, ref expr1, ref block1, _) |
             ExprKind::ForLoop(_, ref expr1, ref block1, _) => {
                 let subdeptree = check_block(block1);
-                // TODO: Use subdeptree
+                deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
+                // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![expr1.clone()]
             },
 
@@ -115,7 +182,8 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr) {
             ExprKind::Block(ref block1) |
             ExprKind::Catch(ref block1) => {
                 let subdeptree = check_block(block1);
-                // TODO: Use subdeptree
+                deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
+                // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![]
             },
 
@@ -145,10 +213,14 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr) {
         }
     };
 
+    // TODO: Create list of stuff that is touched
+    let mut dependencies = vec![];
     for subexpr in &subexprs {
-        check_expr(deptree, subexpr);
+        dependencies.extend(check_expr(deptree, subexpr, node_id));
     }
 
+    // TODO: Return our dependency list to include those statements
+    dependencies
 }
 
 impl EarlyLintPass for AutoParallelise {
@@ -171,7 +243,11 @@ impl EarlyLintPass for AutoParallelise {
                     println!("ARG: {:?}, {:?}", arg.ty.node, arg.pat);
                 }
 
-                check_block(&_block);
+                let deptree = check_block(&_block);
+                println!("DEPTREE:");
+                for node in &deptree {
+                    println!("{:?}", node);
+                }
 
                 self.parallelised_functions.push(Function {
                     ident_name: ident_name,
