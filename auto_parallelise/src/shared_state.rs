@@ -1,4 +1,4 @@
-use syntax::ast::{Stmt, Expr};
+use syntax::ast::{Stmt, Expr, Ident};
 use syntax::ptr::P;
 
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
@@ -22,3 +22,4 @@ pub enum DependencyNode {
     Block(DependencyTree, Vec<usize>),
 }
 pub type DependencyTree = Vec<DependencyNode>;
+pub type PathName = Vec<Ident>;

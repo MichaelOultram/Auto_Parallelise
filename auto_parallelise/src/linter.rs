@@ -1,5 +1,5 @@
 use rustc::lint::{LintArray, LintPass, EarlyContext, EarlyLintPass};
-use syntax::ast::{self, Block, Expr, ExprKind, Stmt, StmtKind};
+use syntax::ast::{self, Block, Expr, ExprKind, Stmt, StmtKind, Path, PatKind};
 use syntax::ptr::P;
 use syntax_pos::Span;
 use syntax::visit::{self, FnKind};
@@ -22,6 +22,14 @@ fn empty_block(block: &Block) -> P<Block> {
         rules: block.rules,
         span: block.span,
     })
+}
+
+fn read_path(path: &Path) -> PathName {
+    let mut output = vec![];
+    for segment in &path.segments {
+        output.push(segment.identifier);
+    }
+    output
 }
 
 fn remove_blocks(stmt: &Stmt) -> P<Stmt> {
@@ -82,6 +90,7 @@ fn remove_blocks(stmt: &Stmt) -> P<Stmt> {
 
 fn check_block(block: &Block) -> DependencyTree {
     let mut deptree: DependencyTree = vec![];
+    let mut depstrtree: Vec<Vec<PathName>> = vec![];
     for stmt in &block.stmts {
         match stmt.node {
             // A local let ?
@@ -89,8 +98,15 @@ fn check_block(block: &Block) -> DependencyTree {
                 if let Some(ref expr) = local.init {
                     deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
                     let node_id = deptree.len() - 1;
-                    let dep_strs = check_expr(&mut deptree, &expr.deref(), node_id);
-                    // TODO: Examine dep_strs to find the statement indicies
+                    let mut dep_strs = check_expr(&mut deptree, &expr.deref(), node_id);
+                    if let PatKind::Ident(ref mode, ref ident, ref mpat) = local.pat.deref().node {
+                        // TODO: Use other two unused variables
+                        dep_strs.push(vec![ident.node]);
+                    } else {
+                        // Managed to get something other than Ident
+                        panic!("local.pat: {:?}", local.pat);
+                    }
+                    depstrtree.push(dep_strs);
                 }
 
                 //println!("Pat Attrs: {:?}", local.pat.node)
@@ -102,8 +118,7 @@ fn check_block(block: &Block) -> DependencyTree {
                 deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
                 let node_id = deptree.len() - 1;
                 let dep_strs = check_expr(&mut deptree, &expr.deref(), node_id);
-                // TODO: Examine dep_strs to find the statement indicies
-
+                depstrtree.push(dep_strs);
             },
 
 
@@ -112,11 +127,54 @@ fn check_block(block: &Block) -> DependencyTree {
             // Macros should be expanded by this point
             StmtKind::Mac(_) => unimplemented!(),
         }
+
+        // Make sure that depstrtree is the same length as deptree
+        for _ in depstrtree.len()..deptree.len() {
+            depstrtree.push(vec![]);
+        }
+
+        // Check that indexs are correct
+        let alen = deptree.len();
+        let blen = depstrtree.len();
+        assert!(alen == blen, format!("{} != {}", alen, blen));
     }
+
+    // TODO: Check blocks for external dependencies
+
+    // Examine dep_strs to find the statement indicies
+    //println!("depstrtree: {:?}", depstrtree);
+    for id in 1..deptree.len() { // 0 cannot have anything depending before it.
+        let mut deps: Vec<usize> = vec![];
+        let mut depstrs: Vec<PathName> = depstrtree[id].clone();
+
+        // find the first instance of each variable from this point (-1)
+        // backwards to the start of depstrtree
+        for backid in (0..id).rev() {
+            let backnode: &Vec<PathName> = &depstrtree[backid];
+            depstrs = depstrs.into_iter().filter(|elem: &PathName| {
+                if backnode.contains(elem) {
+                    // Add backid into deps, and remove elem from depstrs
+                    deps.push(backid);
+                    return false
+                }
+                true
+            }).collect();
+        }
+
+        // Add new deps to node
+        let node_deps = match deptree[id] {
+            DependencyNode::Block(_,ref mut l) | DependencyNode::Expr(_,ref mut l) => l,
+        };
+        node_deps.append(&mut deps);
+        node_deps.sort_unstable();
+        node_deps.dedup();
+    }
+
     deptree
 }
 
-fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<String> { // -> List of variables that is read/modified
+fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<PathName> {
+    let mut dependencies = vec![];
     let subexprs: Vec<P<Expr>> = {
         match expr.node {
             ExprKind::Box(ref expr1) |
@@ -141,9 +199,9 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::MethodCall(_, ref exprl) => exprl.clone(),
 
             ExprKind::Call(ref expr1, ref exprl) => {
-                 let mut exprs = exprl.clone();
-                 exprs.push(expr1.clone());
-                 exprs
+                 // TODO: expr1 resolves to a method name
+                 // Should check whether method is safe/independent?
+                 exprl.clone()
             },
 
             ExprKind::Break(_, ref mexpr1) |
@@ -208,13 +266,18 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
                 exprs
             },
 
+            ExprKind::Path(_, ref path) => {
+                dependencies.push(read_path(path));
+                vec![]
+            },
+
+
             // Unused expressions, panic if used
             _ => vec![],
         }
     };
 
     // TODO: Create list of stuff that is touched
-    let mut dependencies = vec![];
     for subexpr in &subexprs {
         dependencies.extend(check_expr(deptree, subexpr, node_id));
     }
