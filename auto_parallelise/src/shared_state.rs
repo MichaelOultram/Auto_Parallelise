@@ -1,5 +1,11 @@
-use syntax::ast::{Stmt, Expr, Ident};
-use syntax::ptr::P;
+use dependency_analysis::EncodedDependencyTree;
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AutoParallelise {
+    pub compiler_stage: CompilerStage,
+    pub linter_level: u32, // Used to determine when linter has finished
+    pub functions: Vec<Function>,
+}
 
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub enum CompilerStage {
@@ -9,17 +15,18 @@ pub enum CompilerStage {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Function {
-    // TODO: Need to fully qualify name
-    pub ident_name: String,
+    // Function Identifier
+    pub ident_name: String, // TODO: Need to fully qualify name
     pub ident_ctxt: String,
-    pub input_types: Vec<String>,
-    pub output_type: Option<String>,
-}
 
-#[derive(Debug)]
-pub enum DependencyNode {
-    Expr(P<Stmt>, Vec<usize>), // Statement and Dependency indicies
-    Block(DependencyTree, Vec<usize>),
+    pub output_type: Option<String>, // TODO: Remove?
+
+    // Used to determine if entire function call can be parallelised.
+    pub is_unsafe: bool,
+    pub called_functions: Vec<String>,
+    pub input_types: Vec<String>,
+
+    // TODO: Is the dependency tree useful here?
+    // Perhaps move it to the modification stage?
+    pub encoded_deptree: EncodedDependencyTree,
 }
-pub type DependencyTree = Vec<DependencyNode>;
-pub type PathName = Vec<Ident>;

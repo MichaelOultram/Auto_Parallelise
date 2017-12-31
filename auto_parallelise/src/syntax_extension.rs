@@ -6,6 +6,7 @@ use syntax_pos::symbol::Symbol;
 
 use AutoParallelise;
 use CompilerStage;
+use dependency_analysis;
 
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, _ecx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
@@ -35,6 +36,7 @@ impl MultiItemModifier for AutoParallelise {
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
                 println!("{:?}", _fndecl); // Function decl
                 println!("{:?}", _block); // Function block
+                println!("{:?}", dependency_analysis::check_block(&_block));
             } else {
                 panic!("ItemKind was not FN");
             }

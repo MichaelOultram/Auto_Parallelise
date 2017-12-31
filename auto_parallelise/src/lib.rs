@@ -18,6 +18,7 @@ use std::path::Path;
 
 mod linter;
 mod syntax_extension;
+mod dependency_analysis;
 mod shared_state;
 use shared_state::*;
 pub mod noqueue_threadpool;
@@ -41,19 +42,12 @@ pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_early_lint_pass(Box::new(obj));
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AutoParallelise {
-    compiler_stage: CompilerStage,
-    linter_level: u32, // Used to determine when linter has finished
-    parallelised_functions: Vec<Function>,
-}
-
 impl AutoParallelise {
     fn new() -> Self {
         AutoParallelise {
             compiler_stage: CompilerStage::Analysis,
             linter_level: 0,
-            parallelised_functions: vec![],
+            functions: vec![],
         }
     }
 
