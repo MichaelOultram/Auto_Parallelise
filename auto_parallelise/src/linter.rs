@@ -34,7 +34,7 @@ impl EarlyLintPass for AutoParallelise {
                     println!("ARG: {:?}, {:?}", arg.ty.node, arg.pat);
                 }
 
-                let deptree: DependencyTree = dependency_analysis::check_block(&_block);
+                let deptree = dependency_analysis::check_block(&_block);
                 println!("DEPTREE:");
                 for node in &deptree {
                     println!("{:?}", node);
@@ -42,6 +42,9 @@ impl EarlyLintPass for AutoParallelise {
 
                 // convert deptree into encoded_deptree
                 let encoded_deptree = dependency_analysis::encode_deptree(&deptree);
+
+                println!("ENCODED_DEPTREE:");
+                println!("{:?}", encoded_deptree);
 
                 self.functions.push(Function {
                     ident_name: ident_name,
@@ -85,6 +88,7 @@ impl EarlyLintPass for AutoParallelise {
                 CompilerStage::Modification => {
                     println!("[auto_parallelise] parallelised compilation complete");
                     self.delete();
+                    ::std::process::exit(1); // TODO: REMOVE
                 },
             }
         }

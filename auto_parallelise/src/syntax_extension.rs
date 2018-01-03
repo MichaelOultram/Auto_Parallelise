@@ -32,11 +32,19 @@ impl MultiItemModifier for AutoParallelise {
                 tokens: item.tokens.clone(),
             }));
 
-            println!("{:?}", item.id); // Function Id
+            println!("\n\n{:?}", item.id); // Function Id
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
                 println!("{:?}", _fndecl); // Function decl
-                println!("{:?}", _block); // Function block
-                println!("{:?}", dependency_analysis::check_block(&_block));
+
+                let deptree = dependency_analysis::check_block(&_block);
+                println!("DEPTREE:");
+                for node in &deptree {
+                    println!("{:?}", node);
+                }
+
+                let encoded_deptree = dependency_analysis::encode_deptree(&deptree);
+                println!("ENCODED_DEPTREE:");
+                println!("{:?}", encoded_deptree);
             } else {
                 panic!("ItemKind was not FN");
             }

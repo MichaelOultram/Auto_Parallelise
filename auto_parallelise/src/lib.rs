@@ -52,9 +52,6 @@ impl AutoParallelise {
     }
 
     pub fn load() -> Self {
-        // TODO: Remove this line to enable modifications
-        return AutoParallelise::new();
-
         // Attempt to open .auto-parallise file
         let path = Path::new(SAVE_FILE);
         let maybe_file = File::open(&path);

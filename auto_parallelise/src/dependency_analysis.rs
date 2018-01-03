@@ -1,5 +1,6 @@
 use syntax::ast::{Block, Expr, ExprKind, Stmt, StmtKind, Path, PatKind, Ident};
 use syntax::ptr::P;
+use syntax_pos::Pos;
 use std::ops::Deref;
 
 // Used for actual statements
@@ -7,15 +8,17 @@ use std::ops::Deref;
 pub enum DependencyNode {
     Expr(P<Stmt>, Vec<usize>), // Statement and Dependency indicies
     Block(DependencyTree, Vec<usize>),
+    Mac
 }
 pub type DependencyTree = Vec<DependencyNode>;
 pub type PathName = Vec<Ident>;
 
 // Used to store as JSON
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum EncodedDependencyNode {
-    Expr(u32, Vec<usize>), // Statement ID and Dependency indicies
+    Expr(u32, u32, Vec<usize>), // Statement ID and Dependency indicies
     Block(EncodedDependencyTree, Vec<usize>),
+    Mac
 }
 pub type EncodedDependencyTree = Vec<EncodedDependencyNode>;
 
@@ -24,13 +27,14 @@ pub fn encode_deptree(deptree: &DependencyTree) -> EncodedDependencyTree {
     for node in deptree {
         encoded_deptree.push(match node {
             &DependencyNode::Expr(ref stmt, ref deps) => {
-                let node_id = stmt.id.as_u32();
-                EncodedDependencyNode::Expr(node_id, deps.clone())
+                let span = stmt.span;
+                EncodedDependencyNode::Expr(span.lo().0, span.hi().0, deps.clone())
             },
             &DependencyNode::Block(ref subdeptree, ref deps) => {
                 let encoded_subdeptree = encode_deptree(subdeptree);
                 EncodedDependencyNode::Block(encoded_subdeptree, deps.clone())
             },
+            &DependencyNode::Mac => EncodedDependencyNode::Mac
         });
     }
     encoded_deptree
@@ -146,7 +150,7 @@ pub fn check_block(block: &Block) -> DependencyTree {
             StmtKind::Item(ref item) => println!("ITEM: {:?}", item),
 
             // Macros should be expanded by this point
-            StmtKind::Mac(_) => unimplemented!(),
+            StmtKind::Mac(_) => deptree.push(DependencyNode::Mac),
         }
 
         // Make sure that depstrtree is the same length as deptree
@@ -183,12 +187,15 @@ pub fn check_block(block: &Block) -> DependencyTree {
         }
 
         // Add new deps to node
-        let node_deps = match deptree[id] {
-            DependencyNode::Block(_,ref mut l) | DependencyNode::Expr(_,ref mut l) => l,
-        };
-        node_deps.append(&mut deps);
-        node_deps.sort_unstable();
-        node_deps.dedup();
+        match deptree[id] {
+            DependencyNode::Block(_,ref mut l) | DependencyNode::Expr(_,ref mut l) => {
+                l.append(&mut deps);
+                l.sort_unstable();
+                l.dedup();
+            },
+            DependencyNode::Mac => {}, // Has no dependencies
+        }
+
     }
 
     deptree
