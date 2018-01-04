@@ -34,7 +34,7 @@ impl EarlyLintPass for AutoParallelise {
                     println!("ARG: {:?}, {:?}", arg.ty.node, arg.pat);
                 }
 
-                let deptree = dependency_analysis::check_block(&_block);
+                let deptree = dependency_analysis::analyse_block(&_block);
                 println!("DEPTREE:");
                 for node in &deptree {
                     println!("{:?}", node);

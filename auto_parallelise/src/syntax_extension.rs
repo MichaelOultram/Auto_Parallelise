@@ -36,7 +36,7 @@ impl MultiItemModifier for AutoParallelise {
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
                 println!("{:?}", _fndecl); // Function decl
 
-                let deptree = dependency_analysis::check_block(&_block);
+                let deptree = dependency_analysis::analyse_block(&_block);
                 println!("DEPTREE:");
                 for node in &deptree {
                     println!("{:?}", node);

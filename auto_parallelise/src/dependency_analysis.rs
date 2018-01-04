@@ -113,58 +113,8 @@ fn remove_blocks(stmt: &Stmt) -> P<Stmt> {
     P(output)
 }
 
-pub fn check_block(block: &Block) -> DependencyTree {
-    let mut deptree: DependencyTree = vec![];
-    let mut depstrtree: Vec<Vec<PathName>> = vec![];
-    for stmt in &block.stmts {
-        match stmt.node {
-            // A local let ?
-            StmtKind::Local(ref local) => {
-                if let Some(ref expr) = local.init {
-                    deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
-                    let node_id = deptree.len() - 1;
-                    let mut dep_strs = check_expr(&mut deptree, &expr.deref(), node_id);
-                    if let PatKind::Ident(ref mode, ref ident, ref mpat) = local.pat.deref().node {
-                        // TODO: Use other two unused variables
-                        dep_strs.push(vec![ident.node]);
-                    } else {
-                        // Managed to get something other than Ident
-                        panic!("local.pat: {:?}", local.pat);
-                    }
-                    depstrtree.push(dep_strs);
-                }
-
-                //println!("Pat Attrs: {:?}", local.pat.node)
-            },
-
-            // A line in a function
-            StmtKind::Expr(ref expr) |
-            StmtKind::Semi(ref expr) => {
-                deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
-                let node_id = deptree.len() - 1;
-                let dep_strs = check_expr(&mut deptree, &expr.deref(), node_id);
-                depstrtree.push(dep_strs);
-            },
-
-
-            StmtKind::Item(ref item) => println!("ITEM: {:?}", item),
-
-            // Macros should be expanded by this point
-            StmtKind::Mac(_) => deptree.push(DependencyNode::Mac),
-        }
-
-        // Make sure that depstrtree is the same length as deptree
-        for _ in depstrtree.len()..deptree.len() {
-            depstrtree.push(vec![]);
-        }
-
-        // Check that indexs are correct
-        let alen = deptree.len();
-        let blen = depstrtree.len();
-        assert!(alen == blen, format!("{} != {}", alen, blen));
-    }
-
-    // TODO: Check blocks for external dependencies
+pub fn analyse_block(block: &Block) -> DependencyTree {
+    let (mut deptree, depstrtree) = check_block(block);
 
     // Examine dep_strs to find the statement indicies
     //println!("depstrtree: {:?}", depstrtree);
@@ -193,12 +143,95 @@ pub fn check_block(block: &Block) -> DependencyTree {
                 l.sort_unstable();
                 l.dedup();
             },
-            DependencyNode::Mac => {}, // Has no dependencies
+            DependencyNode::Mac => assert!(deps.len() == 0), // Has no dependencies
         }
 
     }
 
     deptree
+}
+
+fn check_block(block: &Block) -> (DependencyTree, Vec<Vec<PathName>>) {
+    let mut deptree: DependencyTree = vec![];
+    let mut depstrtree: Vec<Vec<PathName>> = vec![];
+    for stmt in &block.stmts {
+        let depstr = check_stmt(&mut deptree, &stmt);
+        depstrtree.push(depstr);
+
+        // check_expr sometimes inserts blocks into deptree
+        // Need to work out dependencies for these blocks
+        for i in depstrtree.len()..deptree.len() {
+            let node = &deptree[i];
+            let subdepstr = depnode_to_depstrtree(node);
+            depstrtree.push(subdepstr);
+        }
+
+        // Check that indexs are correct
+        let alen = deptree.len();
+        let blen = depstrtree.len();
+        assert!(alen == blen, format!("{} != {}", alen, blen));
+    }
+
+    (deptree, depstrtree)
+}
+
+fn depnode_to_depstrtree(node: &DependencyNode) -> Vec<PathName> {
+    match node {
+        &DependencyNode::Block(ref nodes, _) => {
+            let mut dep_strs = vec![];
+            for subnode in nodes {
+                let subdep_strs = depnode_to_depstrtree(&subnode);
+                dep_strs.extend(subdep_strs);
+            }
+            dep_strs
+        },
+        &DependencyNode::Expr(ref stmt, _) => check_stmt(&mut vec![], stmt.deref()),
+        _ => vec![],
+    }
+}
+
+fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
+    match stmt.node {
+        // A local let ?
+        StmtKind::Local(ref local) => {
+            if let Some(ref expr) = local.init {
+                deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
+                let node_id = deptree.len() - 1;
+                let mut dep_strs = check_expr(deptree, &expr.deref(), node_id);
+                if let PatKind::Ident(ref mode, ref ident, ref mpat) = local.pat.deref().node {
+                    // TODO: Use other two unused variables
+                    dep_strs.push(vec![ident.node]);
+                } else {
+                    // Managed to get something other than Ident
+                    panic!("local.pat: {:?}", local.pat);
+                }
+                dep_strs
+            } else {
+                vec![]
+            }
+        },
+
+        // A line in a function
+        StmtKind::Expr(ref expr) |
+        StmtKind::Semi(ref expr) => {
+            deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
+            let node_id = deptree.len() - 1;
+            let dep_strs = check_expr(deptree, &expr.deref(), node_id);
+            dep_strs
+        },
+
+
+        StmtKind::Item(ref item) => {
+            println!("ITEM: {:?}", item);
+            vec![]
+        },
+
+        // Macros should be expanded by this point
+        StmtKind::Mac(_) => {
+            deptree.push(DependencyNode::Mac);
+            vec![]
+        },
+    }
 }
 
 fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<PathName> {
@@ -245,7 +278,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
 
             ExprKind::If(ref expr1, ref block1, ref mexpr2) |
             ExprKind::IfLet(_, ref expr1, ref block1, ref mexpr2) => {
-                let subdeptree = check_block(block1);
+                let (subdeptree, _) = check_block(block1);
                 deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 if let &Some(ref expr2) = mexpr2 {
@@ -258,7 +291,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::While(ref expr1, ref block1, _) |
             ExprKind::WhileLet(_, ref expr1, ref block1, _) |
             ExprKind::ForLoop(_, ref expr1, ref block1, _) => {
-                let subdeptree = check_block(block1);
+                let (subdeptree, _) = check_block(block1);
                 deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![expr1.clone()]
@@ -267,7 +300,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::Loop(ref block1, _) |
             ExprKind::Block(ref block1) |
             ExprKind::Catch(ref block1) => {
-                let subdeptree = check_block(block1);
+                let (subdeptree, _) = check_block(block1);
                 deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![]
