@@ -8,7 +8,7 @@ use std::ops::Deref;
 pub enum DependencyNode {
     Expr(P<Stmt>, Vec<usize>), // Statement and Dependency indicies
     Block(DependencyTree, Vec<usize>),
-    Mac
+    Mac(Vec<usize>)
 }
 pub type DependencyTree = Vec<DependencyNode>;
 pub type PathName = Vec<Ident>;
@@ -18,7 +18,7 @@ pub type PathName = Vec<Ident>;
 pub enum EncodedDependencyNode {
     Expr(u32, u32, Vec<usize>), // Statement ID and Dependency indicies
     Block(EncodedDependencyTree, Vec<usize>),
-    Mac
+    Mac(Vec<usize>)
 }
 pub type EncodedDependencyTree = Vec<EncodedDependencyNode>;
 
@@ -34,10 +34,25 @@ pub fn encode_deptree(deptree: &DependencyTree) -> EncodedDependencyTree {
                 let encoded_subdeptree = encode_deptree(subdeptree);
                 EncodedDependencyNode::Block(encoded_subdeptree, deps.clone())
             },
-            &DependencyNode::Mac => EncodedDependencyNode::Mac
+            &DependencyNode::Mac(ref deps) => EncodedDependencyNode::Mac(deps.clone())
         });
     }
     encoded_deptree
+}
+
+
+pub fn extract_dependencies(base: &mut DependencyNode, future: &EncodedDependencyNode) {
+    match base {
+        &mut DependencyNode::Block(_, ref mut deps) => {
+            deps.push(99);
+        },
+        &mut DependencyNode::Expr(_, ref mut deps) => {
+            deps.push(99);
+        },
+        &mut DependencyNode::Mac(ref mut deps) => {
+
+        }
+    }
 }
 
 fn empty_block(block: &Block) -> P<Block> {
@@ -46,6 +61,7 @@ fn empty_block(block: &Block) -> P<Block> {
         id: block.id,
         rules: block.rules,
         span: block.span,
+        recovered: block.recovered,
     })
 }
 
@@ -143,7 +159,7 @@ pub fn analyse_block(block: &Block) -> DependencyTree {
                 l.sort_unstable();
                 l.dedup();
             },
-            DependencyNode::Mac => assert!(deps.len() == 0), // Has no dependencies
+            DependencyNode::Mac(_) => assert!(deps.len() == 0), // Has no dependencies
         }
 
     }
@@ -228,7 +244,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
 
         // Macros should be expanded by this point
         StmtKind::Mac(_) => {
-            deptree.push(DependencyNode::Mac);
+            deptree.push(DependencyNode::Mac(vec![]));
             vec![]
         },
     }

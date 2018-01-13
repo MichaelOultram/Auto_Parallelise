@@ -24,7 +24,7 @@ impl EarlyLintPass for AutoParallelise {
 
         match _fnkind {
             // fn foo()
-            FnKind::ItemFn(_ident, _generics, _unsafety, _spanned, _abi, _visibility, _block) => {
+            FnKind::ItemFn(_ident, _unsafety, _spanned, _abi, _visibility, _block) => {
                 //println!("\n[auto_parallelise] check_fn(context, ItemFn: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid);
                 println!("\n\n{:?}", _fndecl);
                 let ident_name: String = _ident.name.to_string();
