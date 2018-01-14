@@ -51,27 +51,40 @@ pub fn merge_dependencies(base: &mut DependencyTree, patch: &EncodedDependencyTr
 }
 
 fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependencyNode) {
+    // Get list of dependencies from the patch
     let patch_deps = match patch {
         &EncodedDependencyNode::Block(_, ref deps) => deps,
         &EncodedDependencyNode::Expr(_, _, ref deps) => deps,
         &EncodedDependencyNode::Mac(ref deps) => deps,
     };
 
+    // Add the dependencies to the current node
     match base {
         &mut DependencyNode::Block(ref mut base_subtree, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
+            // Recurse down the tree
             if let &EncodedDependencyNode::Block(ref patch_subtree, _) = patch {
                 merge_dependencies(base_subtree, patch_subtree);
             } else {
                 panic!("patch was not a block: {:?}", patch);
             }
         },
-        &mut DependencyNode::Expr(_, ref mut deps) => {
+        &mut DependencyNode::Expr(ref expr, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
+            // Check that span ids line up
+            if let &EncodedDependencyNode::Expr(patch_lo, patch_hi, _) = patch {
+                let base_lo = expr.span.lo().0;
+                let base_hi = expr.span.hi().0;
+                if base_lo != patch_lo || base_hi != patch_hi {
+                    panic!("span ids do not line up: base:{} != patch:{} or base:{} != patch:{}", base_lo, patch_lo, base_hi, patch_hi);
+                }
+            } else {
+                panic!("patch was not a expr: {:?}", patch);
+            }
         },
         &mut DependencyNode::Mac(ref mut deps) => {
             deps.extend(patch_deps);
@@ -320,7 +333,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
 
             ExprKind::If(ref expr1, ref block1, ref mexpr2) |
             ExprKind::IfLet(_, ref expr1, ref block1, ref mexpr2) => {
-                let (subdeptree, _) = check_block(block1);
+                let subdeptree = analyse_block(block1);
                 deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 if let &Some(ref expr2) = mexpr2 {
@@ -333,7 +346,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::While(ref expr1, ref block1, _) |
             ExprKind::WhileLet(_, ref expr1, ref block1, _) |
             ExprKind::ForLoop(_, ref expr1, ref block1, _) => {
-                let (subdeptree, _) = check_block(block1);
+                let subdeptree = analyse_block(block1);
                 deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![expr1.clone()]
@@ -342,7 +355,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::Loop(ref block1, _) |
             ExprKind::Block(ref block1) |
             ExprKind::Catch(ref block1) => {
-                let (subdeptree, _) = check_block(block1);
+                let subdeptree = analyse_block(block1);
                 deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![]
