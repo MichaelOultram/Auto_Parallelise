@@ -5,7 +5,7 @@ use syntax::visit::{self, FnKind};
 
 use AutoParallelise;
 use CompilerStage;
-use dependency_analysis::{self, DependencyTree};
+use dependency_analysis;
 use shared_state::{Function};
 
 impl LintPass for AutoParallelise {

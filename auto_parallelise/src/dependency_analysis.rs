@@ -41,16 +41,42 @@ pub fn encode_deptree(deptree: &DependencyTree) -> EncodedDependencyTree {
 }
 
 
-pub fn extract_dependencies(base: &mut DependencyNode, future: &EncodedDependencyNode) {
+pub fn merge_dependencies(base: &mut DependencyTree, patch: &EncodedDependencyTree) {
+    if base.len() != patch.len() {
+        panic!("Lengths not equal: {:?} != {:?}", base, patch);
+    }
+    for i in 0..base.len() {
+        merge_dependencies_helper(&mut base[i], &patch[i]);
+    }
+}
+
+fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependencyNode) {
+    let patch_deps = match patch {
+        &EncodedDependencyNode::Block(_, ref deps) => deps,
+        &EncodedDependencyNode::Expr(_, _, ref deps) => deps,
+        &EncodedDependencyNode::Mac(ref deps) => deps,
+    };
+
     match base {
-        &mut DependencyNode::Block(_, ref mut deps) => {
-            deps.push(99);
+        &mut DependencyNode::Block(ref mut base_subtree, ref mut deps) => {
+            deps.extend(patch_deps);
+            deps.sort_unstable();
+            deps.dedup();
+            if let &EncodedDependencyNode::Block(ref patch_subtree, _) = patch {
+                merge_dependencies(base_subtree, patch_subtree);
+            } else {
+                panic!("patch was not a block: {:?}", patch);
+            }
         },
         &mut DependencyNode::Expr(_, ref mut deps) => {
-            deps.push(99);
+            deps.extend(patch_deps);
+            deps.sort_unstable();
+            deps.dedup();
         },
         &mut DependencyNode::Mac(ref mut deps) => {
-
+            deps.extend(patch_deps);
+            deps.sort_unstable();
+            deps.dedup();
         }
     }
 }

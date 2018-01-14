@@ -1,12 +1,11 @@
 use syntax::codemap::Span;
-use syntax::ptr;
 use syntax::ast::{self, ItemKind};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
-use syntax_pos::symbol::Symbol;
 
 use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
+use shared_state::Function;
 
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, _ecx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
@@ -15,36 +14,35 @@ impl MultiItemModifier for AutoParallelise {
             return vec![_item];
         }
 
-        //println!("\n[auto-parallelize] expand(_ecx, {:?}, {:?}, {:?})", _span, _meta_item, _item);
-        let item2;
+        // Unwrap item
         if let Annotatable::Item(ref item) = _item {
-            //println!("\n\n{:?}", item.ident); // Function Name
-            // Creates an identical function with a 2 at the end of the name
-            let mut ident2 = item.ident.clone();
-            ident2.name = Symbol::intern(&format!("{}_parallel", item.ident.name));
-            item2 = Annotatable::Item(ptr::P(ast::Item {
-                ident: ident2,
-                attrs: item.attrs.clone(),
-                id: item.id.clone(),
-                node: item.node.clone(),
-                vis: item.vis.clone(),
-                span: item.span.clone(),
-                tokens: item.tokens.clone(),
-            }));
+            // Find function name and the analysed function
+            let func_name = item.ident.name.to_string();
+            println!("\n\n{:?}", func_name); // Function Id
 
-            println!("\n\n{:?}", item.id); // Function Id
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
-                println!("{:?}", _fndecl); // Function decl
+                let mut maybe_analysed_function: Option<&Function> = None;
 
-                let deptree = dependency_analysis::analyse_block(&_block);
-                println!("DEPTREE:");
-                for node in &deptree {
-                    println!("{:?}", node);
+                println!("{:?}", _fndecl); // Function decl
+                for func in &self.functions {
+                    let name_match = func.ident_name == func_name;
+                    // TODO: Check function arguments and return type for a full match (_fndecl)
+                    if name_match {
+                        maybe_analysed_function = Some(func);
+                    }
+                }
+                if let Some(analysed_function) = maybe_analysed_function {
+                    let mut base_deptree = dependency_analysis::analyse_block(&_block);
+                    dependency_analysis::merge_dependencies(&mut base_deptree, &analysed_function.encoded_deptree);
+
+                    println!("DEPTREE:");
+                    for node in &base_deptree {
+                        println!("{:?}", node);
+                    }
                 }
 
-                let encoded_deptree = dependency_analysis::encode_deptree(&deptree);
-                println!("ENCODED_DEPTREE:");
-                println!("{:?}", encoded_deptree);
+
+
             } else {
                 panic!("ItemKind was not FN");
             }
@@ -52,6 +50,6 @@ impl MultiItemModifier for AutoParallelise {
             panic!("Annotatable was not Item");
         }
 
-        vec![_item, item2]
+        vec![_item]
     }
 }

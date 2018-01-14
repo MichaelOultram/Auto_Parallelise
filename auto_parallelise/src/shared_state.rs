@@ -26,7 +26,5 @@ pub struct Function {
     pub called_functions: Vec<String>,
     pub input_types: Vec<String>,
 
-    // TODO: Is the dependency tree useful here?
-    // Perhaps move it to the modification stage?
     pub encoded_deptree: EncodedDependencyTree,
 }
