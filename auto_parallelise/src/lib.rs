@@ -19,6 +19,7 @@ use std::path::Path;
 mod linter;
 mod syntax_extension;
 mod dependency_analysis;
+mod scheduler;
 mod shared_state;
 use shared_state::*;
 pub mod noqueue_threadpool;

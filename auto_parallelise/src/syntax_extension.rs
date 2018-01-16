@@ -6,6 +6,7 @@ use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
 use shared_state::Function;
+use scheduler;
 
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, _ecx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
@@ -21,17 +22,17 @@ impl MultiItemModifier for AutoParallelise {
             println!("\n\n{:?}", func_name); // Function Id
 
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
-                let mut maybe_analysed_function: Option<&Function> = None;
-
                 println!("{:?}", _fndecl); // Function decl
+
+                // Find function from analysed stage
+                let mut maybe_analysed_function: Option<&Function> = None;
                 for func in &self.functions {
-                    let name_match = func.ident_name == func_name;
-                    // TODO: Check function arguments and return type for a full match (_fndecl)
-                    if name_match {
+                    if func.ident_name == func_name {
                         maybe_analysed_function = Some(func);
                     }
                 }
                 if let Some(analysed_function) = maybe_analysed_function {
+                    // Merge the dependency trees
                     let mut base_deptree = dependency_analysis::analyse_block(&_block);
                     dependency_analysis::merge_dependencies(&mut base_deptree, &analysed_function.encoded_deptree);
 
@@ -39,10 +40,15 @@ impl MultiItemModifier for AutoParallelise {
                     for node in &base_deptree {
                         println!("{:?}", node);
                     }
+
+                    // Produce a schedule
+                    let schedule = scheduler::create_schedule(base_deptree);
+
+                    // TODO: Convert schedule into multi-threadded code
+
+                } else {
+                    panic!("{} was not found as an analysed function", func_name);
                 }
-
-
-
             } else {
                 panic!("ItemKind was not FN");
             }
