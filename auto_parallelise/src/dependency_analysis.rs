@@ -397,8 +397,14 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             },
 
             ExprKind::Match(ref expr1, ref arml) => {
-                // TODO: Use arml
-                vec![expr1.clone()]
+                let mut exprs = vec![expr1.clone()];
+                for arm in arml.deref() {
+                    exprs.push(arm.body.clone());
+                    if let Some(ref guard) = arm.guard {
+                        exprs.push(guard.clone());
+                    }
+                }
+                exprs
             },
 
             ExprKind::Closure(_, ref fndecl, ref expr1, _) => {
