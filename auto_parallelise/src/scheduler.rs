@@ -76,8 +76,8 @@ pub fn create_schedule(deptree: &DependencyTree) -> Schedule {
         }
     }
 
-    // Create multiple minimum spanning tree, but each node can only appear once
-    minimum_spanning_trees(&mut spanning_trees, &mut dependent_nodes);
+    // Create multiple maximum spanning tree, but each node can only appear once
+    maximum_spanning_trees(&mut spanning_trees, &mut dependent_nodes);
     println!("SPANNING TREES:");
     for tree in &spanning_trees {
         println!("{}\n", tree.to_string(0));
@@ -90,7 +90,7 @@ pub fn create_schedule(deptree: &DependencyTree) -> Schedule {
     }
 }
 
-fn minimum_spanning_trees<'a>(spanning_trees: &mut Vec<SpanningTree<'a>>,
+fn maximum_spanning_trees<'a>(spanning_trees: &mut Vec<SpanningTree<'a>>,
                               dependent_nodes: &mut Vec<(&'a DependencyNode, Vec<StmtID>)>) {
     // TODO
     //unimplemented!()
@@ -101,11 +101,56 @@ fn minimum_spanning_trees<'a>(spanning_trees: &mut Vec<SpanningTree<'a>>,
         // TODO: Check for nodes with all their dependencies on the spanning_tree
         // TODO: Add the node to the longest dependency
 
+        dependent_nodes.retain(|&(ref node, ref deps_stmtids)| {
+            // If they have a single dependency
+            let mut best_nodes_ids = vec![]; // (TreeID,Weight)
+            let mut all_deps_added = true;
+            let mut keep_node = true;
+            for dep_stmtid in deps_stmtids {
+                // Find the tree nodes that the dependency matches
+                let mut tree_id_pair: Option<(StmtID,usize,u32)> = None;
+                for tree_id in 0..spanning_trees.len() {
+                    let result = spanning_trees[tree_id].get_by_stmtid(*dep_stmtid);
+                    if let Some(_) = result {
+                        tree_id_pair = Some((*dep_stmtid,tree_id,0));//TODO: add weight
+                    }
+                }
+                if let Some(pair) = tree_id_pair {
+                    best_nodes_ids.push(pair);
+                } else {
+                    all_deps_added = false;
+                }
+            }
+
+            // Check that all dependencies
+            if all_deps_added {
+                // Find largest weight
+                let mut best_node_id: Option<(StmtID,usize,u32)> = None;
+                for node_id in best_nodes_ids {
+                    if let Some((_,_,best_weight)) = best_node_id {
+                        let (_,_,weight) = node_id ;
+                        if best_weight < weight {
+                            best_node_id = Some(node_id);
+                        }
+                    } else {
+                        best_node_id = Some(node_id);
+                    }
+                }
+                // Add node to best branch
+                if let Some((stmtid, tree_id, _)) = best_node_id {
+                    let result = spanning_trees[tree_id].get_by_stmtid(stmtid);
+                    if let Some(tree_node) = result {
+                        tree_node.add_child(node);
+                        keep_node = false;
+                    }
+                }
+            }
+            keep_node
+        });
+
         // Check to see if nothing was added in the last iteration
         if num_remaining == dependent_nodes.len() {
-            //TODO: Should panic instead
-            println!("Stuck in an infinite loop");
-            return
+            panic!("Stuck in an infinite loop");
         }
     }
 }
@@ -130,7 +175,7 @@ fn add_single_deps<'a>(spanning_trees: &mut Vec<SpanningTree<'a>>,
             }
         }
         keep_node
-    })
+    });
 }
 
 fn performance_metric(node: &DependencyNode) -> u32 {
