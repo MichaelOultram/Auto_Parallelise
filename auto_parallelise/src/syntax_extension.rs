@@ -42,7 +42,7 @@ impl MultiItemModifier for AutoParallelise {
                     }
 
                     // Produce a schedule
-                    let schedule = scheduler::create_schedule(base_deptree);
+                    let schedule = scheduler::create_schedule(&base_deptree);
 
                     // TODO: Convert schedule into multi-threadded code
 

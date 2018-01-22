@@ -1,4 +1,4 @@
-#![feature(plugin_registrar, rustc_private, slice_patterns)]
+#![feature(plugin_registrar, rustc_private)]
 
 #[macro_use] extern crate serde_derive;
 extern crate serde_json;

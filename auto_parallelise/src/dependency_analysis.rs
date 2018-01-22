@@ -1,14 +1,59 @@
-use syntax::ast::{Block, Expr, ExprKind, Stmt, StmtKind, Path, PatKind, Ident};
+use syntax::ast::{Block, Expr, ExprKind, Stmt, StmtKind, Path, PatKind, Ident, Mac_, MacStmtStyle, Attribute};
 use syntax::ptr::P;
-use syntax_pos::Pos;
 use std::ops::Deref;
+use syntax::codemap::Spanned;
+use syntax::util::ThinVec;
 
+pub type StmtID = (u32, u32);
+type Macro = (Spanned<Mac_>, MacStmtStyle, ThinVec<Attribute>);
 // Used for actual statements
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DependencyNode {
-    Expr(P<Stmt>, Vec<usize>), // Statement and Dependency indicies
-    Block(DependencyTree, Vec<usize>),
-    Mac(Vec<usize>)
+    Expr(StmtID, P<Stmt>, Vec<usize>), // Statement and Dependency indicies
+    Block(StmtID, DependencyTree, Vec<usize>),
+    Mac(StmtID, P<Macro>, Vec<usize>)
+}
+impl DependencyNode {
+    pub fn get_stmtid(&self) -> StmtID {
+        match self {
+            &DependencyNode::Expr(ref stmtid, _, _)  |
+            &DependencyNode::Block(ref stmtid, _, _) |
+            &DependencyNode::Mac(ref stmtid, _, _) => stmtid.clone(),
+        }
+    }
+
+    pub fn get_deps(&self) -> Vec<usize> {
+        match self {
+            &DependencyNode::Expr(_ , _, ref deps)  |
+            &DependencyNode::Block(_, _, ref deps) |
+            &DependencyNode::Mac(_, _, ref deps) => deps.clone(),
+        }
+    }
+
+    pub fn get_deps_stmtids(&self, deptree: &DependencyTree) -> Vec<StmtID> {
+        let deps = self.get_deps();
+        let mut deps_stmtids = vec![];
+        for dep in deps {
+            let dep_node = &deptree[dep.clone()];
+            deps_stmtids.push(dep_node.get_stmtid());
+        }
+        deps_stmtids
+    }
+
+    fn extract_paths(&self) -> Vec<PathName> {
+        match self {
+            &DependencyNode::Block(_, ref nodes, _) => {
+                let mut dep_strs = vec![];
+                for subnode in nodes {
+                    let subdep_strs = subnode.extract_paths();
+                    dep_strs.extend(subdep_strs);
+                }
+                dep_strs
+            },
+            &DependencyNode::Expr(_, ref stmt, _) => check_stmt(&mut vec![], stmt.deref()),
+            _ => vec![],
+        }
+    }
 }
 pub type DependencyTree = Vec<DependencyNode>;
 pub type PathName = Vec<Ident>;
@@ -16,25 +61,25 @@ pub type PathName = Vec<Ident>;
 // Used to store as JSON
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum EncodedDependencyNode {
-    Expr(u32, u32, Vec<usize>), // Statement ID and Dependency indicies
-    Block(EncodedDependencyTree, Vec<usize>),
-    Mac(Vec<usize>)
+    Expr(StmtID, Vec<usize>), // Statement ID and Dependency indicies
+    Block(StmtID, EncodedDependencyTree, Vec<usize>),
+    Mac(StmtID, Vec<usize>)
 }
+
 pub type EncodedDependencyTree = Vec<EncodedDependencyNode>;
 
 pub fn encode_deptree(deptree: &DependencyTree) -> EncodedDependencyTree {
     let mut encoded_deptree = vec![];
     for node in deptree {
         encoded_deptree.push(match node {
-            &DependencyNode::Expr(ref stmt, ref deps) => {
-                let span = stmt.span;
-                EncodedDependencyNode::Expr(span.lo().0, span.hi().0, deps.clone())
+            &DependencyNode::Expr(ref stmtid, _, ref deps) => {
+                EncodedDependencyNode::Expr(stmtid.clone(), deps.clone())
             },
-            &DependencyNode::Block(ref subdeptree, ref deps) => {
+            &DependencyNode::Block(ref stmtid, ref subdeptree, ref deps) => {
                 let encoded_subdeptree = encode_deptree(subdeptree);
-                EncodedDependencyNode::Block(encoded_subdeptree, deps.clone())
+                EncodedDependencyNode::Block(stmtid.clone(), encoded_subdeptree, deps.clone())
             },
-            &DependencyNode::Mac(ref deps) => EncodedDependencyNode::Mac(deps.clone())
+            &DependencyNode::Mac(ref stmtid, _, ref deps) => EncodedDependencyNode::Mac(stmtid.clone(), deps.clone())
         });
     }
     encoded_deptree
@@ -50,33 +95,37 @@ pub fn merge_dependencies(base: &mut DependencyTree, patch: &EncodedDependencyTr
     }
 }
 
+macro_rules! stmtID {
+    ($i:ident) => {{($i.span.lo().0, $i.span.hi().0)}}
+}
+
 fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependencyNode) {
     // Get list of dependencies from the patch
     let patch_deps = match patch {
-        &EncodedDependencyNode::Block(_, ref deps) => deps,
-        &EncodedDependencyNode::Expr(_, _, ref deps) => deps,
-        &EncodedDependencyNode::Mac(ref deps) => deps,
+        &EncodedDependencyNode::Block(_, _, ref deps) |
+        &EncodedDependencyNode::Expr(_, ref deps)  |
+        &EncodedDependencyNode::Mac(_, ref deps) => deps,
     };
 
     // Add the dependencies to the current node
     match base {
-        &mut DependencyNode::Block(ref mut base_subtree, ref mut deps) => {
+        &mut DependencyNode::Block(_, ref mut base_subtree, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
             // Recurse down the tree
-            if let &EncodedDependencyNode::Block(ref patch_subtree, _) = patch {
+            if let &EncodedDependencyNode::Block(_, ref patch_subtree, _) = patch {
                 merge_dependencies(base_subtree, patch_subtree);
             } else {
                 panic!("patch was not a block: {:?}", patch);
             }
         },
-        &mut DependencyNode::Expr(ref expr, ref mut deps) => {
+        &mut DependencyNode::Expr(_, ref expr, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
             // Check that span ids line up
-            if let &EncodedDependencyNode::Expr(patch_lo, patch_hi, _) = patch {
+            if let &EncodedDependencyNode::Expr((patch_lo, patch_hi), _) = patch {
                 let base_lo = expr.span.lo().0;
                 let base_hi = expr.span.hi().0;
                 if base_lo != patch_lo || base_hi != patch_hi {
@@ -86,7 +135,7 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
                 panic!("patch was not a expr: {:?}", patch);
             }
         },
-        &mut DependencyNode::Mac(ref mut deps) => {
+        &mut DependencyNode::Mac(_, _, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
@@ -193,12 +242,12 @@ pub fn analyse_block(block: &Block) -> DependencyTree {
 
         // Add new deps to node
         match deptree[id] {
-            DependencyNode::Block(_,ref mut l) | DependencyNode::Expr(_,ref mut l) => {
+            DependencyNode::Block(_, _,ref mut l) | DependencyNode::Expr(_, _,ref mut l) => {
                 l.append(&mut deps);
                 l.sort_unstable();
                 l.dedup();
             },
-            DependencyNode::Mac(_) => assert!(deps.len() == 0), // Has no dependencies
+            DependencyNode::Mac(_,_,_) => assert!(deps.len() == 0), // Has no dependencies
         }
 
     }
@@ -217,7 +266,7 @@ fn check_block(block: &Block) -> (DependencyTree, Vec<Vec<PathName>>) {
         // Need to work out dependencies for these blocks
         for i in depstrtree.len()..deptree.len() {
             let node = &deptree[i];
-            let subdepstr = depnode_to_depstrtree(node);
+            let subdepstr = node.extract_paths();
             depstrtree.push(subdepstr);
         }
 
@@ -230,27 +279,12 @@ fn check_block(block: &Block) -> (DependencyTree, Vec<Vec<PathName>>) {
     (deptree, depstrtree)
 }
 
-fn depnode_to_depstrtree(node: &DependencyNode) -> Vec<PathName> {
-    match node {
-        &DependencyNode::Block(ref nodes, _) => {
-            let mut dep_strs = vec![];
-            for subnode in nodes {
-                let subdep_strs = depnode_to_depstrtree(&subnode);
-                dep_strs.extend(subdep_strs);
-            }
-            dep_strs
-        },
-        &DependencyNode::Expr(ref stmt, _) => check_stmt(&mut vec![], stmt.deref()),
-        _ => vec![],
-    }
-}
-
 fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
     match stmt.node {
         // A local let ?
         StmtKind::Local(ref local) => {
             if let Some(ref expr) = local.init {
-                deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
+                deptree.push(DependencyNode::Expr(stmtID!(stmt), remove_blocks(&stmt), vec![]));
                 let node_id = deptree.len() - 1;
                 let mut dep_strs = check_expr(deptree, &expr.deref(), node_id);
                 if let PatKind::Ident(ref mode, ref ident, ref mpat) = local.pat.deref().node {
@@ -269,7 +303,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
         // A line in a function
         StmtKind::Expr(ref expr) |
         StmtKind::Semi(ref expr) => {
-            deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
+            deptree.push(DependencyNode::Expr(stmtID!(stmt), remove_blocks(&stmt), vec![]));
             let node_id = deptree.len() - 1;
             let dep_strs = check_expr(deptree, &expr.deref(), node_id);
             dep_strs
@@ -282,8 +316,9 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
         },
 
         // Macros should be expanded by this point
-        StmtKind::Mac(_) => {
-            deptree.push(DependencyNode::Mac(vec![]));
+        StmtKind::Mac(ref mac) => {
+            let &(ref stmt, _, _) = mac.deref();
+            deptree.push(DependencyNode::Mac(stmtID!(stmt), mac.clone(), vec![]));
             vec![]
         },
     }
@@ -334,7 +369,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::If(ref expr1, ref block1, ref mexpr2) |
             ExprKind::IfLet(_, ref expr1, ref block1, ref mexpr2) => {
                 let subdeptree = analyse_block(block1);
-                deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
+                deptree.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 if let &Some(ref expr2) = mexpr2 {
                     vec![expr1.clone(), expr2.clone()]
@@ -347,7 +382,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::WhileLet(_, ref expr1, ref block1, _) |
             ExprKind::ForLoop(_, ref expr1, ref block1, _) => {
                 let subdeptree = analyse_block(block1);
-                deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
+                deptree.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![expr1.clone()]
             },
@@ -356,7 +391,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
             ExprKind::Block(ref block1) |
             ExprKind::Catch(ref block1) => {
                 let subdeptree = analyse_block(block1);
-                deptree.push(DependencyNode::Block(subdeptree, vec![node_id]));
+                deptree.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![node_id]));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![]
             },
