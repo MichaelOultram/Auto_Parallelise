@@ -2,6 +2,8 @@ use syntax::codemap::Span;
 use syntax::ast::{self, ItemKind};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
 
+use serde_json;
+
 use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
@@ -43,7 +45,11 @@ impl MultiItemModifier for AutoParallelise {
 
                     // Produce a schedule
                     let schedule = scheduler::create_schedule(&base_deptree);
-
+                    let schedule_json = match serde_json::to_string_pretty(&schedule) {
+                        Ok(obj) => obj,
+                        Err(why) => panic!("Unable to convert AutoParallelise to JSON: {}", why),
+                    };
+                    println!("SCHEDULE:\n{}\n", schedule_json);
                     // TODO: Convert schedule into multi-threadded code
 
                 } else {

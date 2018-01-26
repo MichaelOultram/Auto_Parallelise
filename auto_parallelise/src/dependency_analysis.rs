@@ -3,30 +3,81 @@ use syntax::ptr::P;
 use std::ops::Deref;
 use syntax::codemap::Spanned;
 use syntax::util::ThinVec;
+use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 pub type StmtID = (u32, u32);
+macro_rules! stmtID {
+    ($i:ident) => {{($i.span.lo().0, $i.span.hi().0)}}
+}
+
 type Macro = (Spanned<Mac_>, MacStmtStyle, ThinVec<Attribute>);
 // Used for actual statements
 #[derive(Debug, PartialEq)]
 pub enum DependencyNode {
-    Expr(StmtID, P<Stmt>, Vec<usize>), // Statement and Dependency indicies
+    Expr(P<Stmt>, Vec<usize>), // Statement and Dependency indicies
     Block(StmtID, DependencyTree, Vec<usize>),
-    Mac(StmtID, P<Macro>, Vec<usize>)
+    ExprBlock(P<Stmt>, DependencyTree, Vec<usize>),
+    Mac(P<Macro>, Vec<usize>)
+}
+impl Serialize for DependencyNode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        match self {
+            &DependencyNode::Expr(ref stmt, ref deps) => {
+                let mut state = serializer.serialize_struct("Expr", 2)?;
+                state.serialize_field("stmt", &format!("{:?}", stmt))?;
+                state.serialize_field("deps", deps)?;
+                state.end()
+            },
+            &DependencyNode::Block(ref stmt, ref tree, ref deps) => {
+                let mut state = serializer.serialize_struct("Block", 0)?;
+                //state.serialize_field("stmt", &format!("{:?}", stmt))?;
+                //state.serialize_field("deps", deps)?;
+                //state.serialize_field("subtree", tree)?;
+                state.end()
+            },
+            &DependencyNode::ExprBlock(ref stmt, ref tree, ref deps) => {
+                let mut state = serializer.serialize_struct("ExprBlock", 3)?;
+                state.serialize_field("stmt", &format!("{:?}", stmt))?;
+                state.serialize_field("deps", deps)?;
+                state.serialize_field("subtree", tree)?;
+                state.end()
+            },
+            &DependencyNode::Mac(ref mac, ref deps) => {
+                let mut state = serializer.serialize_struct("Mac", 2)?;
+                state.serialize_field("stmt", &format!("{:?}", mac))?;
+                state.serialize_field("deps", deps)?;
+                state.end()
+            },
+        }
+    }
 }
 impl DependencyNode {
     pub fn get_stmtid(&self) -> StmtID {
         match self {
-            &DependencyNode::Expr(ref stmtid, _, _)  |
-            &DependencyNode::Block(ref stmtid, _, _) |
-            &DependencyNode::Mac(ref stmtid, _, _) => stmtid.clone(),
+            &DependencyNode::Expr(ref stmt, _) => {
+                let stmt = stmt.deref();
+                stmtID!(stmt)
+            },
+            &DependencyNode::Mac(ref mac, _) => {
+                let &(ref stmt, _, _) = mac.deref();
+                stmtID!(stmt)
+            },
+            &DependencyNode::ExprBlock(ref stmt, _, _) => {
+                let stmt = stmt.deref();
+                stmtID!(stmt)
+            },
+            &DependencyNode::Block(ref stmtid, _, _) => stmtid.clone(),
         }
     }
 
     pub fn get_deps(&self) -> Vec<usize> {
         match self {
-            &DependencyNode::Expr(_ , _, ref deps)  |
+            &DependencyNode::Expr( _, ref deps)  |
             &DependencyNode::Block(_, _, ref deps) |
-            &DependencyNode::Mac(_, _, ref deps) => deps.clone(),
+            &DependencyNode::ExprBlock(_, _, ref deps) |
+            &DependencyNode::Mac(_, ref deps) => deps.clone(),
         }
     }
 
@@ -50,8 +101,25 @@ impl DependencyNode {
                 }
                 dep_strs
             },
-            &DependencyNode::Expr(_, ref stmt, _) => check_stmt(&mut vec![], stmt.deref()),
+            &DependencyNode::Expr(ref stmt, _) => check_stmt(&mut vec![], stmt.deref()),
             _ => vec![],
+        }
+    }
+
+    pub fn encode(&self) -> EncodedDependencyNode {
+        match self {
+            &DependencyNode::Expr(_, ref deps) => {
+                EncodedDependencyNode::Expr(self.get_stmtid(), deps.clone())
+            },
+            &DependencyNode::Block(_, ref subdeptree, ref deps) => {
+                let encoded_subdeptree = encode_deptree(subdeptree);
+                EncodedDependencyNode::Block(self.get_stmtid(), encoded_subdeptree, deps.clone())
+            },
+            &DependencyNode::ExprBlock(_, ref subdeptree, ref deps) => {
+                let encoded_subdeptree = encode_deptree(subdeptree);
+                EncodedDependencyNode::ExprBlock(self.get_stmtid(), encoded_subdeptree, deps.clone())
+            },
+            &DependencyNode::Mac(_, ref deps) => EncodedDependencyNode::Mac(self.get_stmtid(), deps.clone())
         }
     }
 }
@@ -63,6 +131,7 @@ pub type PathName = Vec<Ident>;
 pub enum EncodedDependencyNode {
     Expr(StmtID, Vec<usize>), // Statement ID and Dependency indicies
     Block(StmtID, EncodedDependencyTree, Vec<usize>),
+    ExprBlock(StmtID, EncodedDependencyTree, Vec<usize>),
     Mac(StmtID, Vec<usize>)
 }
 
@@ -71,16 +140,7 @@ pub type EncodedDependencyTree = Vec<EncodedDependencyNode>;
 pub fn encode_deptree(deptree: &DependencyTree) -> EncodedDependencyTree {
     let mut encoded_deptree = vec![];
     for node in deptree {
-        encoded_deptree.push(match node {
-            &DependencyNode::Expr(ref stmtid, _, ref deps) => {
-                EncodedDependencyNode::Expr(stmtid.clone(), deps.clone())
-            },
-            &DependencyNode::Block(ref stmtid, ref subdeptree, ref deps) => {
-                let encoded_subdeptree = encode_deptree(subdeptree);
-                EncodedDependencyNode::Block(stmtid.clone(), encoded_subdeptree, deps.clone())
-            },
-            &DependencyNode::Mac(ref stmtid, _, ref deps) => EncodedDependencyNode::Mac(stmtid.clone(), deps.clone())
-        });
+        encoded_deptree.push(node.encode());
     }
     encoded_deptree
 }
@@ -95,13 +155,10 @@ pub fn merge_dependencies(base: &mut DependencyTree, patch: &EncodedDependencyTr
     }
 }
 
-macro_rules! stmtID {
-    ($i:ident) => {{($i.span.lo().0, $i.span.hi().0)}}
-}
-
 fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependencyNode) {
     // Get list of dependencies from the patch
     let patch_deps = match patch {
+        &EncodedDependencyNode::ExprBlock(_, _, ref deps) |
         &EncodedDependencyNode::Block(_, _, ref deps) |
         &EncodedDependencyNode::Expr(_, ref deps)  |
         &EncodedDependencyNode::Mac(_, ref deps) => deps,
@@ -109,6 +166,17 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
 
     // Add the dependencies to the current node
     match base {
+        &mut DependencyNode::ExprBlock(_, ref mut base_subtree, ref mut deps) => {
+            deps.extend(patch_deps);
+            deps.sort_unstable();
+            deps.dedup();
+            // Recurse down the tree
+            if let &EncodedDependencyNode::ExprBlock(_, ref patch_subtree, _) = patch {
+                merge_dependencies(base_subtree, patch_subtree);
+            } else {
+                panic!("patch was not a exprblock: {:?}", patch);
+            }
+        },
         &mut DependencyNode::Block(_, ref mut base_subtree, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
@@ -120,14 +188,14 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
                 panic!("patch was not a block: {:?}", patch);
             }
         },
-        &mut DependencyNode::Expr(_, ref expr, ref mut deps) => {
+        &mut DependencyNode::Expr(ref stmt, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
             // Check that span ids line up
             if let &EncodedDependencyNode::Expr((patch_lo, patch_hi), _) = patch {
-                let base_lo = expr.span.lo().0;
-                let base_hi = expr.span.hi().0;
+                let base_lo = stmt.span.lo().0;
+                let base_hi = stmt.span.hi().0;
                 if base_lo != patch_lo || base_hi != patch_hi {
                     panic!("span ids do not line up: base:{} != patch:{} or base:{} != patch:{}", base_lo, patch_lo, base_hi, patch_hi);
                 }
@@ -135,7 +203,7 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
                 panic!("patch was not a expr: {:?}", patch);
             }
         },
-        &mut DependencyNode::Mac(_, _, ref mut deps) => {
+        &mut DependencyNode::Mac(_, ref mut deps) => {
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
@@ -242,12 +310,14 @@ pub fn analyse_block(block: &Block) -> DependencyTree {
 
         // Add new deps to node
         match deptree[id] {
-            DependencyNode::Block(_, _,ref mut l) | DependencyNode::Expr(_, _,ref mut l) => {
+            DependencyNode::ExprBlock(_, _,ref mut l) |
+            DependencyNode::Block(_, _,ref mut l) |
+            DependencyNode::Expr(_,ref mut l) => {
                 l.append(&mut deps);
                 l.sort_unstable();
                 l.dedup();
             },
-            DependencyNode::Mac(_,_,_) => assert!(deps.len() == 0), // Has no dependencies
+            DependencyNode::Mac(_, _) => assert!(deps.len() == 0), // Has no dependencies
         }
 
     }
@@ -284,7 +354,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
         // A local let ?
         StmtKind::Local(ref local) => {
             if let Some(ref expr) = local.init {
-                deptree.push(DependencyNode::Expr(stmtID!(stmt), remove_blocks(&stmt), vec![]));
+                deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
                 let node_id = deptree.len() - 1;
                 let mut dep_strs = check_expr(deptree, &expr.deref(), node_id);
                 if let PatKind::Ident(ref mode, ref ident, ref mpat) = local.pat.deref().node {
@@ -303,7 +373,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
         // A line in a function
         StmtKind::Expr(ref expr) |
         StmtKind::Semi(ref expr) => {
-            deptree.push(DependencyNode::Expr(stmtID!(stmt), remove_blocks(&stmt), vec![]));
+            deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![]));
             let node_id = deptree.len() - 1;
             let dep_strs = check_expr(deptree, &expr.deref(), node_id);
             dep_strs
@@ -318,7 +388,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
         // Macros should be expanded by this point
         StmtKind::Mac(ref mac) => {
             let &(ref stmt, _, _) = mac.deref();
-            deptree.push(DependencyNode::Mac(stmtID!(stmt), mac.clone(), vec![]));
+            deptree.push(DependencyNode::Mac(mac.clone(), vec![]));
             vec![]
         },
     }
