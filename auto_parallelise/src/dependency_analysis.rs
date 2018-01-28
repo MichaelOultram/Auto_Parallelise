@@ -25,27 +25,31 @@ impl Serialize for DependencyNode {
     {
         match self {
             &DependencyNode::Expr(ref stmt, ref deps) => {
-                let mut state = serializer.serialize_struct("Expr", 2)?;
+                let mut state = serializer.serialize_struct("Expr", 3)?;
+                state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 state.serialize_field("stmt", &format!("{:?}", stmt))?;
                 state.serialize_field("deps", deps)?;
                 state.end()
             },
             &DependencyNode::Block(ref stmt, ref tree, ref deps) => {
-                let mut state = serializer.serialize_struct("Block", 0)?;
+                let mut state = serializer.serialize_struct("Block", 1)?;
+                state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 //state.serialize_field("stmt", &format!("{:?}", stmt))?;
                 //state.serialize_field("deps", deps)?;
                 //state.serialize_field("subtree", tree)?;
                 state.end()
             },
             &DependencyNode::ExprBlock(ref stmt, ref tree, ref deps) => {
-                let mut state = serializer.serialize_struct("ExprBlock", 3)?;
+                let mut state = serializer.serialize_struct("ExprBlock", 4)?;
+                state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 state.serialize_field("stmt", &format!("{:?}", stmt))?;
                 state.serialize_field("deps", deps)?;
                 state.serialize_field("subtree", tree)?;
                 state.end()
             },
             &DependencyNode::Mac(ref mac, ref deps) => {
-                let mut state = serializer.serialize_struct("Mac", 2)?;
+                let mut state = serializer.serialize_struct("Mac", 3)?;
+                state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 state.serialize_field("stmt", &format!("{:?}", mac))?;
                 state.serialize_field("deps", deps)?;
                 state.end()
@@ -477,7 +481,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Vec<
                 exprs
             },
 
-            ExprKind::Closure(_, ref fndecl, ref expr1, _) => {
+            ExprKind::Closure(_, _, ref fndecl, ref expr1, _) => {
                 // TODO: Use fndecl
                 vec![expr1.clone()]
             },

@@ -1,63 +1,48 @@
 use dependency_analysis::{DependencyTree, DependencyNode, StmtID};
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct Schedule<'a> {
-    schedule_trees: Vec<ScheduleTree<'a>>,
-    sync_lines: Vec<(StmtID, StmtID)>, // Prerequisite dependency, Node to wait for the dependency
-}
+pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);
 
 #[derive(Debug, PartialEq, Serialize)]
-enum ScheduleTree<'a> {
-    Node(SpanningTree<'a>),
-    Block(SpanningTree<'a>, Schedule<'a>),
+pub enum ScheduleTree<'a> {
+    // Prerequisite dependencies, Current Statement + Children
+    Node(Vec<StmtID>, SpanningTree<'a>),
+    // Prerequisite dependencies, Current Statement + Children, Inner Block Schedule
+    Block(Vec<StmtID>, SpanningTree<'a>, Schedule<'a>),
+    // Node to wait for the dependency
+    SyncTo(StmtID, StmtID),
 }
 
 impl <'a>ScheduleTree<'a>{
-    pub fn new(node: &'a DependencyNode) -> Self {
+    pub fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode,) -> Self {
+        if prereqs.len() > 0 {
+            println!("Got a prereq: {:?}, for node {:?}", prereqs, node);
+        }
         match node {
             &DependencyNode::Expr(_, _) |
             &DependencyNode::Mac(_, _) => {
-                ScheduleTree::Node(SpanningTree::new(node, 0)) //TODO: get extra weight
+                ScheduleTree::Node(prereqs, SpanningTree::new(node, 0)) //TODO: get extra weight
             },
 
             &DependencyNode::Block(_, ref tree, _) |
             &DependencyNode::ExprBlock(_, ref tree, _) => {
-                ScheduleTree::Block(SpanningTree::new(node, 0), create_schedule(tree))
+                ScheduleTree::Block(prereqs, SpanningTree::new(node, 0), create_schedule(tree))
             },
         }
     }
 
-    pub fn get_spanning_tree(&self) -> &SpanningTree<'a> {
+    pub fn get_spanning_tree(&mut self) -> Option<&mut SpanningTree<'a>> {
         match self {
-            &ScheduleTree::Node(ref tree) |
-            &ScheduleTree::Block(ref tree, _) => tree,
+            &mut ScheduleTree::Node(_, ref mut tree) |
+            &mut ScheduleTree::Block(_, ref mut tree, _) => Some(tree),
+            _ => None,
         }
     }
 
-    pub fn get_spanning_tree_mut(&mut self) -> &mut SpanningTree<'a> {
-        match self {
-            &mut ScheduleTree::Node(ref mut tree) |
-            &mut ScheduleTree::Block(ref mut tree, _) => tree,
-        }
-    }
-
-    pub fn to_string(&self, indent: u32) -> String {
-        let mut output = "".to_owned();
-        for _ in 0..indent {
-            output.push_str("    ");
-        }
-        match self {
-            &ScheduleTree::Node(ref tree) => {}
-            &ScheduleTree::Block(ref tree, ref schedule) => {},
-        }
-
-        output.push_str(&format!("{:?}", self.get_spanning_tree().to_string(0)));
-        output
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct SpanningTree<'a> {
+pub struct SpanningTree<'a> {
     node: &'a DependencyNode,
     weight: u32,
     children: Vec<ScheduleTree<'a>>,
@@ -77,31 +62,25 @@ impl<'a> SpanningTree<'a> {
             return Some(self);
         } else {
             for child in &mut self.children {
-                let result = child.get_spanning_tree_mut().get_by_stmtid(stmtid);
-                if let Some(_) = result {
-                    return result;
+                if let Some(child_tree) = child.get_spanning_tree() {
+                    let result = child_tree.get_by_stmtid(stmtid);
+                    if let Some(_) = result {
+                        return result;
+                    }
                 }
             }
             None
         }
     }
 
-    fn add_child(&mut self, node:&'a DependencyNode) {
-        self.children.push(ScheduleTree::new(node));
+    fn add_child(&mut self, prereqs: Vec<StmtID>, node:&'a DependencyNode) {
+        self.children.push(ScheduleTree::new(prereqs, node));
     }
 
-    pub fn to_string(&self, indent: u32) -> String {
-        let mut output = "".to_owned();
-        for _ in 0..indent {
-            output.push_str("    ");
-        }
-        output.push_str(&format!("[{}] {:?}", self.weight, self.node));
-        for c in &self.children {
-            output.push_str("\n");
-            output.push_str(&c.to_string(indent + 1));
-        }
-        output
+    fn add_sync_to(&mut self, pre: StmtID, node: StmtID) {
+        self.children.push(ScheduleTree::SyncTo(pre, node));
     }
+
 }
 
 pub fn create_schedule(deptree: &DependencyTree) -> Schedule {
@@ -113,7 +92,7 @@ pub fn create_schedule(deptree: &DependencyTree) -> Schedule {
         let deps_stmtids = node.get_deps_stmtids(deptree);
         if deps_stmtids.len() == 0 {
             // Independent nodes should create a new spanning_tree
-            schedule_trees.push(ScheduleTree::new(node));
+            schedule_trees.push(ScheduleTree::new(vec![], node));
         } else {
             // Dependent nodes are stored in a list to be added later
             dependent_nodes.push((node, deps_stmtids));
@@ -123,23 +102,18 @@ pub fn create_schedule(deptree: &DependencyTree) -> Schedule {
     // Create multiple maximum spanning tree, but each node can only appear once
     maximum_spanning_trees(&mut schedule_trees, &mut dependent_nodes);
 
-    // TODO: Add in synchronisation lines for missing dependencies
-    Schedule {
-        schedule_trees: schedule_trees,
-        sync_lines: vec![],
-    }
+    Schedule(schedule_trees)
 }
 
 fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                               dependent_nodes: &mut Vec<(&'a DependencyNode, Vec<StmtID>)>) {
-    // TODO
-    //unimplemented!()
     let mut num_remaining;
     while dependent_nodes.len() > 0 {
         num_remaining = dependent_nodes.len();
-        add_single_deps(schedule_trees, dependent_nodes);
-        // TODO: Check for nodes with all their dependencies on the spanning_tree
-        // TODO: Add the node to the longest dependency
+        println!("num_remaining: {}", num_remaining);
+
+        // Check for nodes with all their dependencies on the spanning_tree
+        // Add the node to the longest dependency
 
         dependent_nodes.retain(|&(ref node, ref deps_stmtids)| {
             // If they have a single dependency
@@ -150,9 +124,13 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                 // Find the tree nodes that the dependency matches
                 let mut tree_id_pair: Option<(StmtID,usize,u32)> = None;
                 for tree_id in 0..schedule_trees.len() {
-                    let result = schedule_trees[tree_id].get_spanning_tree_mut().get_by_stmtid(*dep_stmtid);
-                    if let Some(_) = result {
-                        tree_id_pair = Some((*dep_stmtid,tree_id,0));//TODO: add weight
+                    if let Some(child_tree) = schedule_trees[tree_id].get_spanning_tree() {
+                        let result = child_tree.get_by_stmtid(*dep_stmtid);
+                        if let Some(_) = result {
+                            tree_id_pair = Some((*dep_stmtid,tree_id,0));//TODO: add weight
+                        }
+                    } else {
+                        panic!();
                     }
                 }
                 if let Some(pair) = tree_id_pair {
@@ -162,27 +140,61 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                 }
             }
 
-            // Check that all dependencies
+            // Check that all dependencies are in the tree
             if all_deps_added {
                 // Find largest weight
                 let mut best_node_id: Option<(StmtID,usize,u32)> = None;
-                for node_id in best_nodes_ids {
+                for node_id in &best_nodes_ids {
                     if let Some((_,_,best_weight)) = best_node_id {
-                        let (_,_,weight) = node_id ;
+                        let &(_,_,weight) = node_id ;
                         if best_weight < weight {
-                            best_node_id = Some(node_id);
+                            best_node_id = Some(*node_id);
                         }
                     } else {
-                        best_node_id = Some(node_id);
+                        best_node_id = Some(*node_id);
                     }
                 }
-                // Add node to best branch
-                if let Some((stmtid, tree_id, _)) = best_node_id {
-                    let result = schedule_trees[tree_id].get_spanning_tree_mut().get_by_stmtid(stmtid);
-                    if let Some(tree_node) = result {
-                        tree_node.add_child(node);
-                        keep_node = false;
+
+                if let Some((best_stmtid, best_tree_id, _)) = best_node_id {
+                    let mut prereqs = vec![];
+                    // Add sync lines for the other dependencies
+                    for &(node_stmtid, node_tree_id, _) in &best_nodes_ids {
+                        // Check that this node is not the best node
+                        if node_stmtid != best_stmtid {
+                            // Get the dependency node on the tree
+                            if let Some(child_tree) = schedule_trees[node_tree_id].get_spanning_tree() {
+                                let result = child_tree.get_by_stmtid(node_stmtid);
+                                if let Some(tree_node) = result {
+                                    tree_node.add_sync_to(node_stmtid, node.get_stmtid());
+                                    prereqs.push(node_stmtid);
+                                } else {
+                                    panic!();
+                                }
+                            } else {
+                                panic!();
+                            }
+                        }
                     }
+                    assert!(prereqs.len() + 1 == best_nodes_ids.len());
+                    if prereqs.len() > 0 {
+                        println!("Had prereqs: {:?}", prereqs);
+                    }
+
+                    // Add node to best branch
+                    if let Some(child_tree) = schedule_trees[best_tree_id].get_spanning_tree() {
+                        let result = child_tree.get_by_stmtid(best_stmtid);
+                        if let Some(tree_node) = result {
+                            tree_node.add_child(prereqs, node);
+                            assert!(keep_node);
+                            keep_node = false;
+                        } else {
+                            panic!();
+                        }
+                    }
+
+                    assert!(!keep_node);
+                } else {
+                    panic!();
                 }
             }
             keep_node
@@ -193,29 +205,6 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
             panic!("Stuck in an infinite loop");
         }
     }
-}
-
-fn add_single_deps<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
-                       dependent_nodes: &mut Vec<(&'a DependencyNode, Vec<StmtID>)>) {
-    // Add all nodes with a single dependency to the tree if their dependent node is on the tree
-    // Look at all the nodes and their dependencies
-    dependent_nodes.retain(|&(ref node, ref deps_stmtids)| {
-        // If they have a single dependency
-        let mut keep_node = true;
-        if deps_stmtids.len() == 1 {
-            let dep_stmtid = deps_stmtids[0];
-            // Find the tree nodes that the dependency matches
-            for tree in schedule_trees.iter_mut() {
-                let result = tree.get_spanning_tree_mut().get_by_stmtid(dep_stmtid);
-                if let Some(tree_node) = result {
-                    // If it is found, add the node as a child
-                    tree_node.add_child(node);
-                    keep_node = false;
-                }
-            }
-        }
-        keep_node
-    });
 }
 
 fn performance_metric(node: &DependencyNode) -> u32 {
