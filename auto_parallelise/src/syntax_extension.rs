@@ -1,6 +1,7 @@
 use syntax::codemap::Span;
-use syntax::ast::{self, ItemKind};
+use syntax::ast::{self, ItemKind, Ident, Stmt};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
+use syntax::ext::build::AstBuilder;
 
 use serde_json;
 
@@ -11,16 +12,17 @@ use shared_state::Function;
 use scheduler;
 
 impl MultiItemModifier for AutoParallelise {
-    fn expand(&self, _ecx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
+    fn expand(&self, cx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
         // Only make changes when on the Modification stage
         if self.compiler_stage != CompilerStage::Modification {
             return vec![_item];
         }
-
+        let mut output = vec![];
         // Unwrap item
         if let Annotatable::Item(ref item) = _item {
             // Find function name and the analysed function
-            let func_name = item.ident.name.to_string();
+            let func_ident = item.ident;
+            let func_name = func_ident.name.to_string();
             println!("\n\n{:?}", func_name); // Function Id
 
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
@@ -50,8 +52,31 @@ impl MultiItemModifier for AutoParallelise {
                         Err(why) => panic!("Unable to convert AutoParallelise to JSON: {}", why),
                     };
                     println!("SCHEDULE:\n{}\n", schedule_json);
-                    // TODO: Convert schedule into multi-threadded code
 
+                    // Convert schedule into multi-threadded code
+
+                    // Gather all the synclines and create them as variables
+                    let synclines = schedule.get_all_synclines();
+                    println!("Synclines:\n{:?}\n", synclines);
+                    let mut stmts = quote_stmt!(cx, {}).unwrap();
+                    for ((to_a, to_b), (from_a, from_b)) in synclines {
+                        let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+                        let sx = Ident::from_str(&format!("{}_send", line_name));
+                        let rx = Ident::from_str(&format!("{}_receive", line_name));
+                        stmts = quote_stmt!(cx, {
+                            $stmts
+                            let ($sx, $rx) = (2, 3);
+                        }).unwrap();
+                    }
+
+                    println!("Body: {:?}", stmts);
+
+                    let new_func = quote_item!(cx,
+                        fn $func_ident() -> u32 {
+                            $stmts
+                        }
+                    ).unwrap();
+                    output.push(Annotatable::Item(new_func));
                 } else {
                     panic!("{} was not found as an analysed function", func_name);
                 }
@@ -62,6 +87,7 @@ impl MultiItemModifier for AutoParallelise {
             panic!("Annotatable was not Item");
         }
 
-        vec![_item]
+        output
+        //vec![_item]
     }
 }

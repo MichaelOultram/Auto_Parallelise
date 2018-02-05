@@ -1,4 +1,4 @@
-#![feature(plugin_registrar, rustc_private)]
+#![feature(quote, plugin_registrar, rustc_private)]
 
 extern crate serde;
 #[macro_use] extern crate serde_derive;

@@ -30,6 +30,7 @@ clean:
 	$(LATEXMK) -C $(MAIN)
 	rm -f $(MAIN).pdfsync
 	rm -rf *~ *.tmp
+	rm -rf svg-inkscape
 	rm -f *.bbl *.blg *.aux *.end *.fls *.log *.out *.fdb_latexmk *.run.xml
 
 once:

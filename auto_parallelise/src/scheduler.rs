@@ -2,6 +2,16 @@ use dependency_analysis::{DependencyTree, DependencyNode, StmtID};
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);
+impl<'a> Schedule<'a> {
+    pub fn get_all_synclines(&self) -> Vec<(StmtID, StmtID)> {
+        let mut synclines = vec![];
+        for tree in &(self.0) {
+            synclines.append(&mut tree.get_all_synclines());
+        }
+        synclines
+    }
+}
+
 
 #[derive(Debug, PartialEq, Serialize)]
 pub enum ScheduleTree<'a> {
@@ -14,7 +24,7 @@ pub enum ScheduleTree<'a> {
 }
 
 impl <'a>ScheduleTree<'a>{
-    pub fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode,) -> Self {
+    fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode,) -> Self {
         if prereqs.len() > 0 {
             println!("Got a prereq: {:?}, for node {:?}", prereqs, node);
         }
@@ -39,6 +49,19 @@ impl <'a>ScheduleTree<'a>{
         }
     }
 
+    fn get_all_synclines(&self) -> Vec<(StmtID, StmtID)> {
+        let mut synclines = vec![];
+        match self {
+            &ScheduleTree::Node(_, ref tree) |
+            &ScheduleTree::Block(_, ref tree, _) => {
+                for child in &tree.children {
+                    synclines.append(&mut child.get_all_synclines())
+                }
+            },
+            &ScheduleTree::SyncTo(from, to) => synclines.push((from, to)),
+        }
+        synclines
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize)]
