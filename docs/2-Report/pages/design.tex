@@ -1,0 +1,41 @@
+\section{Design}
+\subsection{Dependency Analysis}
+% Analysis Stage
+%==================
+% Convert from Rust AST to our representation of Blocks and Statements
+% Examine each statement for variables
+% Find out the previous statement that the variable is referenced.
+% This is a dependency and recorded as a relative id for the block
+% Inside a block, a new DependencyTree is created
+% The function name, DependencyTree and some other meta data is stored into an list.
+% This is repeated for all the functions which have the annotation
+
+% Once all the function have been analysed.
+% Each dependency tree is converted into an EncodedDependencyTree by taking the StmtID of each statement.
+% StmtID is the span.lo().0 and span.hi().0 which refers to the byte in the original source code.
+
+% All the EncodedDependencyTree's and function meta data is saved into a JSON file
+
+% Modification Stage
+%==================
+% First part of analysis stage is repeated for the modification stage.
+% Modification stage does not have marcos expanded, and so some dependencies would be missed.
+% The EncodedDependencyTree is loaded from the JSON file which should include the dependency of the expanded macros.
+% The EncodedDependencyTree is merged with the DependencyTree from the Modification stage so that unexpanded macros have dependencies.
+
+\subsection{Scheduler}
+% Takes the DependencyTree of a function with all relative dependencies added.
+% Converts the relative dependencies into StmtIDs
+% Maximum Spanning Tree:
+% 	Looks for any fully independent statements and starts a new ScheduleTree for each of them
+% 	while remaining_nodes:
+%		For all remaining nodes:
+%			if the node has all it's dependencies on the tree already
+%				find dependency node with maximum performance value (+ all dependent nodes on tree)
+%				add node to tree here (with a preresquite of all the other dependencies)
+%				add synclines onto the other dependency nodes so that all dependencies will be met
+% Inside a block, a new Schedule is created
+
+% Performance Metric:
+% Currently just a fixed number 1
+\subsection{Reconstructor}
