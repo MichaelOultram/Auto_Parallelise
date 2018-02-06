@@ -88,7 +88,7 @@ impl EarlyLintPass for AutoParallelise {
                 CompilerStage::Modification => {
                     println!("[auto_parallelise] parallelised compilation complete");
                     self.delete();
-                    ::std::process::exit(1); // TODO: REMOVE
+                    //::std::process::exit(1); // TODO: REMOVE
                 },
             }
         }

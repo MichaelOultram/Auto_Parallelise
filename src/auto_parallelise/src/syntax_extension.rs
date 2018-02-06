@@ -1,5 +1,6 @@
 use syntax::codemap::Span;
-use syntax::ast::{self, ItemKind, Ident, Stmt};
+use syntax::ptr::P;
+use syntax::ast::{self, Stmt, Block, Item, ItemKind, Ident};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
 use syntax::ext::build::AstBuilder;
 
@@ -10,6 +11,16 @@ use CompilerStage;
 use dependency_analysis;
 use shared_state::Function;
 use scheduler;
+
+fn create_block(block: &Block, stmts: Vec<Stmt>) -> P<Block> {
+    P(Block {
+        stmts: stmts,
+        id: block.id,
+        rules: block.rules,
+        span: block.span,
+        recovered: block.recovered,
+    })
+}
 
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, cx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
@@ -58,25 +69,36 @@ impl MultiItemModifier for AutoParallelise {
                     // Gather all the synclines and create them as variables
                     let synclines = schedule.get_all_synclines();
                     println!("Synclines:\n{:?}\n", synclines);
-                    let mut stmts = quote_stmt!(cx, {}).unwrap();
+                    let mut stmts = vec![];
                     for ((to_a, to_b), (from_a, from_b)) in synclines {
                         let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
                         let sx = Ident::from_str(&format!("{}_send", line_name));
                         let rx = Ident::from_str(&format!("{}_receive", line_name));
-                        stmts = quote_stmt!(cx, {
-                            $stmts
-                            let ($sx, $rx) = (2, 3);
-                        }).unwrap();
+                        let stmt = quote_stmt!(cx, let ($sx, $rx) = std::sync::mpsc::channel()).unwrap();
+                        stmts.push(stmt);
                     }
 
-                    println!("Body: {:?}", stmts);
+                    let new_block = create_block(_block, stmts);
+                    println!("Body: {:?}", new_block);
 
-                    let new_func = quote_item!(cx,
-                        fn $func_ident() -> u32 {
-                            $stmts
-                        }
-                    ).unwrap();
-                    output.push(Annotatable::Item(new_func));
+                    // Convert function into use new_block
+                    let new_func = ItemKind::Fn(_fndecl.clone(), *_unsafety, *_constness, *_abi, _generics.clone(), new_block);
+                    println!("new_func: {:?}", new_func);
+                    let new_item = Item {
+                        attrs: item.attrs.clone(),
+                        id: item.id,
+                        ident: item.ident,
+                        node: new_func,
+                        span: item.span,
+                        tokens: item.tokens.clone(),
+                        vis: item.vis.clone(),
+                    };
+                    println!("new_item: {:?}", new_item);
+
+                    let anno_item = Annotatable::Item(P(new_item));
+                    println!("new_item: {:?}", anno_item);
+
+                    output.push(anno_item);
                 } else {
                     panic!("{} was not found as an analysed function", func_name);
                 }
