@@ -3,6 +3,8 @@ use syntax::ptr::P;
 use syntax::ast::{self, Stmt, Block, Item, ItemKind, Ident};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
 use syntax::ext::build::AstBuilder;
+use syntax::print::pprust;
+use std::ops::Deref;
 
 use serde_json;
 
@@ -10,16 +12,17 @@ use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
 use shared_state::Function;
-use scheduler;
+use scheduler::{self, Schedule, ScheduleTree};
 
-fn create_block(block: &Block, stmts: Vec<Stmt>) -> P<Block> {
-    P(Block {
+fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
+    let block = quote_block!(cx, {});
+    Block {
         stmts: stmts,
         id: block.id,
         rules: block.rules,
         span: block.span,
         recovered: block.recovered,
-    })
+    }
 }
 
 impl MultiItemModifier for AutoParallelise {
@@ -77,13 +80,13 @@ impl MultiItemModifier for AutoParallelise {
                         let stmt = quote_stmt!(cx, let ($sx, $rx) = std::sync::mpsc::channel()).unwrap();
                         stmts.push(stmt);
                     }
+                    stmts.append(&mut spawn_from_schedule(cx, schedule.list()));
 
-                    let new_block = create_block(_block, stmts);
-                    println!("Body: {:?}", new_block);
+                    let new_block = create_block(cx, stmts);
 
                     // Convert function into use new_block
-                    let new_func = ItemKind::Fn(_fndecl.clone(), *_unsafety, *_constness, *_abi, _generics.clone(), new_block);
-                    println!("new_func: {:?}", new_func);
+                    let new_func = ItemKind::Fn(_fndecl.clone(), *_unsafety, *_constness, *_abi, _generics.clone(), P(new_block));
+
                     let new_item = Item {
                         attrs: item.attrs.clone(),
                         id: item.id,
@@ -93,11 +96,10 @@ impl MultiItemModifier for AutoParallelise {
                         tokens: item.tokens.clone(),
                         vis: item.vis.clone(),
                     };
-                    println!("new_item: {:?}", new_item);
+                    // Prints the function
+                    println!("converted_function:\n{}\n", pprust::item_to_string(&new_item));
 
                     let anno_item = Annotatable::Item(P(new_item));
-                    println!("new_item: {:?}", anno_item);
-
                     output.push(anno_item);
                 } else {
                     panic!("{} was not found as an analysed function", func_name);
@@ -112,4 +114,48 @@ impl MultiItemModifier for AutoParallelise {
         output
         //vec![_item]
     }
+}
+
+fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec<Stmt> {
+    let mut output = vec![];
+
+    for i in 0..sch.len() {
+        let mut thread_contents = vec![];
+        match sch[i] {
+            ScheduleTree::Node(ref stmtid, ref spanning_tree) => {
+                //TODO: wait for spanning_tree.node.prereqs
+                let mut prereq = vec![];
+                thread_contents.append(&mut prereq);
+
+                let stmt: Stmt = spanning_tree.node.get_stmt().unwrap().deref().clone();
+                thread_contents.push(stmt);
+
+                let mut children = spawn_from_schedule(cx, &spanning_tree.children);
+                thread_contents.append(&mut children);
+
+            }
+            ScheduleTree::Block(ref stmtid, ref spanning_tree, ref schedule) => {
+                let mut children = spawn_from_schedule(cx, &spanning_tree.children);
+                let mut inner_block = spawn_from_schedule(cx, schedule.list());
+                //TODO: wait for spanning_tree.node.prereqs
+                //unimplemented!()
+
+            }
+            ScheduleTree::SyncTo(ref stmtid1, ref stmtid2) => {
+                //unimplemented!()
+            }
+        }
+
+        if i == sch.len() - 1 {
+            // Last uses the current thread
+            output.append(&mut thread_contents);
+        } else {
+            // All execpt the last is put into a concurrent thread
+            let thread_block = create_block(cx, thread_contents);
+            let thread_stmt = quote_stmt!(cx, std::thread::spawn(move || $thread_block);).unwrap();
+            output.push(thread_stmt);
+        }
+    }
+
+    output
 }

@@ -17,7 +17,7 @@ pub enum DependencyNode {
     Expr(P<Stmt>, Vec<usize>), // Statement and Dependency indicies
     Block(StmtID, DependencyTree, Vec<usize>),
     ExprBlock(P<Stmt>, DependencyTree, Vec<usize>),
-    Mac(P<Macro>, Vec<usize>)
+    Mac(P<Stmt>, Vec<usize>)
 }
 impl Serialize for DependencyNode {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -47,10 +47,10 @@ impl Serialize for DependencyNode {
                 state.serialize_field("subtree", tree)?;
                 state.end()
             },
-            &DependencyNode::Mac(ref mac, ref deps) => {
+            &DependencyNode::Mac(ref stmt, ref deps) => {
                 let mut state = serializer.serialize_struct("Mac", 3)?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
-                state.serialize_field("stmt", &format!("{:?}", mac))?;
+                state.serialize_field("stmt", &format!("{:?}", stmt))?;
                 state.serialize_field("deps", deps)?;
                 state.end()
             },
@@ -60,19 +60,22 @@ impl Serialize for DependencyNode {
 impl DependencyNode {
     pub fn get_stmtid(&self) -> StmtID {
         match self {
-            &DependencyNode::Expr(ref stmt, _) => {
-                let stmt = stmt.deref();
-                stmtID!(stmt)
-            },
-            &DependencyNode::Mac(ref mac, _) => {
-                let &(ref stmt, _, _) = mac.deref();
-                stmtID!(stmt)
-            },
+            &DependencyNode::Expr(ref stmt, _) |
+            &DependencyNode::Mac(ref stmt, _) |
             &DependencyNode::ExprBlock(ref stmt, _, _) => {
                 let stmt = stmt.deref();
                 stmtID!(stmt)
             },
             &DependencyNode::Block(ref stmtid, _, _) => stmtid.clone(),
+        }
+    }
+
+    pub fn get_stmt(&self) -> Option<&P<Stmt>> {
+        match self {
+            &DependencyNode::Expr(ref stmt, _)  |
+            &DependencyNode::ExprBlock(ref stmt, _, _) |
+            &DependencyNode::Mac(ref stmt, _) => Some(stmt),
+            &DependencyNode::Block(_, _, _) => None,
         }
     }
 
@@ -391,8 +394,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Vec<PathName> {
 
         // Macros should be expanded by this point
         StmtKind::Mac(ref mac) => {
-            let &(ref stmt, _, _) = mac.deref();
-            deptree.push(DependencyNode::Mac(mac.clone(), vec![]));
+            deptree.push(DependencyNode::Mac(P(stmt.clone()), vec![]));
             vec![]
         },
     }

@@ -10,6 +10,10 @@ impl<'a> Schedule<'a> {
         }
         synclines
     }
+
+    pub fn list(&self) -> &Vec<ScheduleTree<'a>> {
+        &self.0
+    }
 }
 
 
@@ -66,9 +70,9 @@ impl <'a>ScheduleTree<'a>{
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct SpanningTree<'a> {
-    node: &'a DependencyNode,
-    weight: u32,
-    children: Vec<ScheduleTree<'a>>,
+    pub node: &'a DependencyNode,
+    pub weight: u32,
+    pub children: Vec<ScheduleTree<'a>>,
 }
 
 impl<'a> SpanningTree<'a> {
