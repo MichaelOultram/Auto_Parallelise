@@ -118,43 +118,79 @@ impl MultiItemModifier for AutoParallelise {
 
 fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec<Stmt> {
     let mut output = vec![];
+    let mut threads = vec![];
 
     for i in 0..sch.len() {
-        let mut thread_contents = vec![];
-        match sch[i] {
-            ScheduleTree::Node(ref stmtid, ref spanning_tree) => {
-                //TODO: wait for spanning_tree.node.prereqs
-                let mut prereq = vec![];
-                thread_contents.append(&mut prereq);
-
-                let stmt: Stmt = spanning_tree.node.get_stmt().unwrap().deref().clone();
-                thread_contents.push(stmt);
-
-                let mut children = spawn_from_schedule(cx, &spanning_tree.children);
-                thread_contents.append(&mut children);
-
-            }
-            ScheduleTree::Block(ref stmtid, ref spanning_tree, ref schedule) => {
-                let mut children = spawn_from_schedule(cx, &spanning_tree.children);
-                let mut inner_block = spawn_from_schedule(cx, schedule.list());
-                //TODO: wait for spanning_tree.node.prereqs
-                //unimplemented!()
-
-            }
-            ScheduleTree::SyncTo(ref stmtid1, ref stmtid2) => {
-                //unimplemented!()
-            }
-        }
-
-        if i == sch.len() - 1 {
-            // Last uses the current thread
-            output.append(&mut thread_contents);
+        if let ScheduleTree::SyncTo(ref stmtid1, ref stmtid2) = sch[i] {
+            let &(to_a, to_b) = stmtid1;
+            let &(from_a, from_b) = stmtid2;
+            let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+            let sx = Ident::from_str(&format!("{}_send", line_name));
+            let prereq = quote_stmt!(cx, $sx.send(()).unwrap();).unwrap();
+            output.push(prereq);
         } else {
-            // All execpt the last is put into a concurrent thread
-            let thread_block = create_block(cx, thread_contents);
-            let thread_stmt = quote_stmt!(cx, std::thread::spawn(move || $thread_block);).unwrap();
-            output.push(thread_stmt);
+            let mut thread_contents = vec![];
+            // Add prereqs and create a schedule for children
+            let ((lo, hi), mut children) = match sch[i] {
+                ScheduleTree::Block(ref prereqs, ref spanning_tree, _) |
+                ScheduleTree::Node(ref prereqs, ref spanning_tree) => {
+                    // Add prereqs
+                    let (from_a, from_b) = spanning_tree.node.get_stmtid();
+                    for &(to_a, to_b) in prereqs {
+                        let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+                        let rx = Ident::from_str(&format!("{}_receive", line_name));
+                        let prereq = quote_stmt!(cx, $rx.recv().unwrap();).unwrap();
+                        thread_contents.push(prereq);
+                    }
+
+                    // Spawn children after node
+                    let children = spawn_from_schedule(cx, &spanning_tree.children);
+
+                    // Return node id
+                    (spanning_tree.node.get_stmtid(), children)
+                }
+                ScheduleTree::SyncTo(_, _) => panic!("Unreachable case"),
+            };
+
+            // Add the current item
+            match sch[i] {
+                ScheduleTree::Node(_, ref spanning_tree) => {
+                    // Copy statement of node
+                    let stmt = spanning_tree.node.get_stmt().unwrap().deref().clone();
+                    thread_contents.push(stmt);
+                }
+                ScheduleTree::Block(_, _, ref schedule) => {
+                    // Add block to the schedule
+                    let mut inner_block = spawn_from_schedule(cx, schedule.list());
+                    let block = create_block(cx, inner_block);
+                    let stmt = quote_stmt!(cx, $block).unwrap();
+                    thread_contents.push(stmt);
+                }
+                ScheduleTree::SyncTo(_, _) => panic!("Unreachable case"),
+            };
+
+            // Add children
+            thread_contents.append(&mut children);
+
+            if i == sch.len() - 1 {
+                // Last uses the current thread
+                output.append(&mut thread_contents);
+            } else {
+                // All execpt the last is put into a concurrent thread
+                let thread_sname = format!("thread_{}_{}", lo, hi);
+                let thread_name = Ident::from_str(&thread_sname);
+                let thread_block = create_block(cx, thread_contents);
+                let thread_stmt = quote_stmt!(cx, let $thread_name = std::thread::spawn(move || $thread_block);).unwrap();
+                output.push(thread_stmt);
+                threads.push(thread_name);
+            }
         }
+    }
+
+    // Join all threads
+    for thread in threads {
+        let thread_stmt = quote_stmt!(cx, $thread.join().unwrap();).unwrap();
+        output.push(thread_stmt);
     }
 
     output
