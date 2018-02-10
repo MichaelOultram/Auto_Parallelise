@@ -2,7 +2,6 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::ast::{self, Stmt, Block, Item, ItemKind, Ident};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
-use syntax::ext::build::AstBuilder;
 use syntax::print::pprust;
 use std::ops::Deref;
 
@@ -12,7 +11,7 @@ use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
 use shared_state::Function;
-use scheduler::{self, Schedule, ScheduleTree};
+use scheduler::{self, ScheduleTree};
 
 fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
     let block = quote_block!(cx, {});
@@ -121,7 +120,7 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
     let mut threads = vec![];
 
     for i in 0..sch.len() {
-        if let ScheduleTree::SyncTo(ref stmtid1, ref stmtid2) = sch[i] {
+        if let ScheduleTree::SyncTo(ref stmtid1, ref stmtid2, _) = sch[i] {
             let &(to_a, to_b) = stmtid1;
             let &(from_a, from_b) = stmtid2;
             let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
@@ -134,6 +133,8 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
             let ((lo, hi), mut children) = match sch[i] {
                 ScheduleTree::Block(ref prereqs, ref spanning_tree, _) |
                 ScheduleTree::Node(ref prereqs, ref spanning_tree) => {
+                    println!("{:?} paths: {:?}", spanning_tree.node.get_stmtid(), spanning_tree.node.get_env());
+
                     // Add prereqs
                     let (from_a, from_b) = spanning_tree.node.get_stmtid();
                     for &(to_a, to_b) in prereqs {
@@ -149,7 +150,7 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
                     // Return node id
                     (spanning_tree.node.get_stmtid(), children)
                 }
-                ScheduleTree::SyncTo(_, _) => panic!("Unreachable case"),
+                ScheduleTree::SyncTo(_, _, _) => panic!("Unreachable case"),
             };
 
             // Add the current item
@@ -166,7 +167,7 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
                     let stmt = quote_stmt!(cx, $block).unwrap();
                     thread_contents.push(stmt);
                 }
-                ScheduleTree::SyncTo(_, _) => panic!("Unreachable case"),
+                ScheduleTree::SyncTo(_, _, _) => panic!("Unreachable case"),
             };
 
             // Add children

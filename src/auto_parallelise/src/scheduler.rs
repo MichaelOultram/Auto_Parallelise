@@ -1,4 +1,5 @@
-use dependency_analysis::{DependencyTree, DependencyNode, StmtID};
+use dependency_analysis::{DependencyTree, DependencyNode, StmtID, Environment};
+use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);
@@ -16,7 +17,6 @@ impl<'a> Schedule<'a> {
     }
 }
 
-
 #[derive(Debug, PartialEq, Serialize)]
 pub enum ScheduleTree<'a> {
     // Prerequisite dependencies, Current Statement + Children
@@ -24,22 +24,22 @@ pub enum ScheduleTree<'a> {
     // Prerequisite dependencies, Current Statement + Children, Inner Block Schedule
     Block(Vec<StmtID>, SpanningTree<'a>, Schedule<'a>),
     // Node to wait for the dependency
-    SyncTo(StmtID, StmtID),
+    SyncTo(StmtID, StmtID, Environment), // TODO: Include list of variables sent over the channel
 }
 
-impl <'a>ScheduleTree<'a>{
+impl<'a> ScheduleTree<'a>{
     fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode,) -> Self {
         if prereqs.len() > 0 {
             println!("Got a prereq: {:?}, for node {:?}", prereqs, node);
         }
         match node {
-            &DependencyNode::Expr(_, _) |
-            &DependencyNode::Mac(_, _) => {
+            &DependencyNode::Expr(_, _, _) |
+            &DependencyNode::Mac(_, _, _) => {
                 ScheduleTree::Node(prereqs, SpanningTree::new(node, 0)) //TODO: get extra weight
             },
 
-            &DependencyNode::Block(_, ref tree, _) |
-            &DependencyNode::ExprBlock(_, ref tree, _) => {
+            &DependencyNode::Block(_, ref tree, _, _) |
+            &DependencyNode::ExprBlock(_, ref tree, _, _) => {
                 ScheduleTree::Block(prereqs, SpanningTree::new(node, 0), create_schedule(tree))
             },
         }
@@ -62,7 +62,7 @@ impl <'a>ScheduleTree<'a>{
                     synclines.append(&mut child.get_all_synclines())
                 }
             },
-            &ScheduleTree::SyncTo(from, to) => synclines.push((from, to)),
+            &ScheduleTree::SyncTo(from, to, _) => synclines.push((from, to)),
         }
         synclines
     }
@@ -105,7 +105,7 @@ impl<'a> SpanningTree<'a> {
     }
 
     fn add_sync_to(&mut self, pre: StmtID, node: StmtID) {
-        self.children.push(ScheduleTree::SyncTo(pre, node));
+        self.children.push(ScheduleTree::SyncTo(pre, node, Environment::empty()));
     }
 
 }
@@ -236,15 +236,15 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
 
 fn performance_metric(node: &DependencyNode) -> u32 {
     match node {
-        &DependencyNode::Expr(_, _) => 1,
-        &DependencyNode::ExprBlock(_, ref nodes,_) |
-        &DependencyNode::Block(_, ref nodes,_) => {
+        &DependencyNode::Expr(_, _, _) => 1,
+        &DependencyNode::ExprBlock(_, ref nodes,_, _) |
+        &DependencyNode::Block(_, ref nodes,_, _) => {
             let mut total = 0;
             for node in nodes {
                 total += performance_metric(node);
             }
             total
         },
-        &DependencyNode::Mac(_, _) => 1,
+        &DependencyNode::Mac(_, _, _) => 1,
     }
 }

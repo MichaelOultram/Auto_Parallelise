@@ -61,12 +61,12 @@ impl EarlyLintPass for AutoParallelise {
             },
 
             // fn foo(&self), i.e. obj.foo();
-            FnKind::Method(_ident, _method_sig, _visibility, _block) =>
-            println!("\n[auto_parallelise] check_fn(context, Method: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid),
+            FnKind::Method(_ident, _method_sig, _visibility, _block) => unimplemented!(),
+            //println!("\n[auto_parallelise] check_fn(context, Method: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid),
 
             // |x, y| body
-            FnKind::Closure(_body) =>
-            println!("\n[auto_parallelise] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", _body, _fndecl, _span, _nodeid),
+            FnKind::Closure(_body) => unimplemented!(),
+            //println!("\n[auto_parallelise] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", _body, _fndecl, _span, _nodeid),
         }
         self.save();
     }
