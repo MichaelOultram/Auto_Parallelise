@@ -13,9 +13,9 @@
 \usepackage{svg} % svg images
 \usepackage{pdfpages}
 
-% Shrinks section titles as they are too large
+% Center titles: https://tex.stackexchange.com/questions/107281/centering-chapter-section-subsection
 \usepackage{sectsty}
-\sectionfont{\fontsize{15}{18}\selectfont}
+\allsectionsfont{\centering}
 
 % References
 \usepackage[utf8]{inputenc}
@@ -27,3 +27,17 @@
 % TODOs command
 \newcommand{\todo}[1]{\textbf{{\color{red}TODO: }#1}}
 %\newcommand{\todo}[1]{}
+
+% DRAFT watermark
+\usepackage{xcolor}
+\usepackage[printwatermark]{xwatermark}
+\newwatermark[allpages,color=gray!10,angle=45,scale=6,xpos=-15,ypos=0]{DRAFT}
+
+% Algorithms
+\usepackage{algorithm}
+\def\algorithmautorefname{Algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{minted}
+\usemintedstyle{autumn}
+\setminted{breaklines,baselinestretch=1} % fontsize=\footnotesize
+\usepackage{subfig}

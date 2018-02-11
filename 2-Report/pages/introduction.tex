@@ -1,1 +1,22 @@
-\section{Introduction}
+\chapter{Introduction}
+
+\todo{Write introduction}
+
+\section{Rust Language Features}
+Rust is similar to other programming languages such as C++ but it does has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. For more in depth explainations of these features, the reader should look at the language documentation \parencite{rustbook}.
+
+%\subsection{Ownership/Borrowing/Moving}
+In Rust, all variables have an ownership. Only one block can have access to that variable at a time. This is enforced at compile time.
+
+\begin{minted}{rust}
+fn main() {
+    let a = 10;
+    f(&a);
+    g(a);
+    // Cannot access a here anymore
+}
+fn f(a: &u32){} // f borrows a
+fn g(a: u32){} // g takes ownership of a
+\end{minted}
+
+\todo{finish and rewrite}

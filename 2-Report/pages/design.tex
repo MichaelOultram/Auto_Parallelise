@@ -1,6 +1,6 @@
-\section{Design}
+\chapter{Design}
 
-\subsection{Dependency Analysis}
+\section{Dependency Analysis}
 % Analysis Stage
 %==================
 % Convert from Rust AST to our representation of Blocks and Statements
@@ -24,7 +24,7 @@
 % The EncodedDependencyTree is loaded from the JSON file which should include the dependency of the expanded macros.
 % The EncodedDependencyTree is merged with the DependencyTree from the Modification stage so that unexpanded macros have dependencies.
 
-\subsection{Scheduler}
+\section{Scheduler}
 % Takes the DependencyTree of a function with all relative dependencies added.
 % Converts the relative dependencies into StmtIDs
 % Maximum Spanning Tree:
@@ -39,5 +39,5 @@
 
 % Performance Metric:
 % Currently just a fixed number 1
-\subsection{Reconstructor}
+\section{Reconstructor}
 % Takes the schedule of a function and converts it back into real (parallelised) code

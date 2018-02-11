@@ -8,6 +8,8 @@
 *.tmp
 *.bcf
 *.run.xml
+_minted-main/*
+*.xwm
 
 # Latex gitignore
 # Stolen from: https://gist.github.com/kogakure/149016
