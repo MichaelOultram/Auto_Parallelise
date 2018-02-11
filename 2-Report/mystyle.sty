@@ -2,7 +2,7 @@
 \usepackage{longtable}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage[margin=2cm]{geometry}
+\usepackage[margin=2.5cm]{geometry}
 \usepackage[hidelinks]{hyperref}
 \usepackage{parskip}
 \usepackage{color}
@@ -15,7 +15,10 @@
 
 % Center titles: https://tex.stackexchange.com/questions/107281/centering-chapter-section-subsection
 \usepackage{sectsty}
+\usepackage{titlesec}
 \allsectionsfont{\centering}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+\titleformat{\chapter}[display]{\normalfont\huge\bfseries\centering}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
 
 % References
 \usepackage[utf8]{inputenc}
@@ -34,10 +37,30 @@
 \newwatermark[allpages,color=gray!10,angle=45,scale=6,xpos=-15,ypos=0]{DRAFT}
 
 % Algorithms
-\usepackage{algorithm}
-\def\algorithmautorefname{Algorithm}
-\usepackage[noend]{algpseudocode}
+%\usepackage{algorithm}
+%\def\algorithmautorefname{Algorithm}
+%\usepackage[noend]{algpseudocode}
+\usepackage{mdframed}
 \usepackage{minted}
 \usemintedstyle{autumn}
-\setminted{breaklines,baselinestretch=1} % fontsize=\footnotesize
-\usepackage{subfig}
+\setminted{xleftmargin=1cm,breaklines,baselinestretch=1.2,linenos,fontsize=\footnotesize,frame=lines,framesep=2mm,bgcolor=gray!10}
+\renewcommand\theFancyVerbLine{\scriptsize\arabic{FancyVerbLine}}
+
+%\codeblock{filename.rs}{firstline}{endline}{caption}
+\usepackage{caption}
+\newenvironment{codeenv}{\captionsetup{type=listing}}{}
+\newcommand{\codeblock}[5]{
+    \begin{codeenv}
+        \inputminted[firstline=#2, lastline=#3, label=\detokenize{#1}]{rust}{code/#1}
+        \vspace{-2em}\caption{#4}
+        \label{\detokenize{#1}:#5}
+    \end{codeenv}
+}
+
+%\newcommand{\codeblock}[5]{
+%    \begin{listing}[ht]
+%        \inputminted[firstline=#2, lastline=#3, label=\detokenize{#1}]{rust}{code/#1}
+%        \vspace{-2em}\caption{#4}
+%        \label{\detokenize{#1}:#5}
+%    \end{listing}
+%}
