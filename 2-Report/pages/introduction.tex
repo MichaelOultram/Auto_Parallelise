@@ -5,9 +5,10 @@
 \section{Rust Language Features}
 Rust is similar to other programming languages such as C++ but it does has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. For more in depth explainations of these features, the reader should look at the language documentation \parencite{rustbook}.
 
-%\subsection{Ownership/Borrowing/Moving}
+\subsection{Ownership of variables}
 In Rust, all variables have an ownership. Only one block can have access to that variable at a time. This is enforced at compile time.
 
+\begin{code}
 \begin{minted}{rust}
 fn main() {
     let a = 10;
@@ -18,5 +19,16 @@ fn main() {
 fn f(a: &u32){} // f borrows a
 fn g(a: u32){} // g takes ownership of a
 \end{minted}
+\caption{Sample code}
+\end{code}
+
+In this example, \texttt{a} is a local variable in the \texttt{main} method.
+
+When \texttt{f} is called with parameter \texttt{a}, the function borrows that variable. This is similar to call-by-reference from other programming languages.
+
+When \texttt{g} is called with parameter \texttt{a}, the variable is moved to \texttt{g}. This is unlike other programming languages as this is not call-by-value. Instead \texttt{g} takes ownership of \texttt{a}. When \texttt{g} is returned, the main method can no longer use \texttt{a}.
 
 \todo{finish and rewrite}
+
+\subsection{Mutability}
+Variables in rust are immutable by default.
