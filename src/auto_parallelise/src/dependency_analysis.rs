@@ -447,18 +447,26 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Environment {
         // A local let ?
         StmtKind::Local(ref local) => {
             if let Some(ref expr) = local.init {
-                deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![], Environment::empty()));
-                let node_id = deptree.len() - 1;
-                let mut dep_strs = check_expr(deptree, &expr.deref(), node_id);
+                // Check expression
+                let mut subtree = vec![];
+                let mut env = check_expr(&mut subtree, &expr.deref());
+
+                // Add current variable name as part of the environment
                 if let PatKind::Ident(ref mode, ref ident, ref mpat) = local.pat.deref().node {
                     // TODO: Use other two unused variables
-                    dep_strs.push(vec![ident.node]);
+                    env.push(vec![ident.node]);
                 } else {
                     // Managed to get something other than Ident
                     panic!("local.pat: {:?}", local.pat);
                 }
-                deptree[node_id].get_env_mut().merge(dep_strs.clone());
-                dep_strs
+
+                // Add Expr or ExprBlock into dependency tree
+                if subtree.len() == 0 {
+                    deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![], env.clone()));
+                } else {
+                    deptree.push(DependencyNode::ExprBlock(remove_blocks(&stmt), subtree, vec![], env.clone()));
+                }
+                env
             } else {
                 Environment::empty()
             }
@@ -467,13 +475,18 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Environment {
         // A line in a function
         StmtKind::Expr(ref expr) |
         StmtKind::Semi(ref expr) => {
-            deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![], Environment::empty()));
-            let node_id = deptree.len() - 1;
-            let dep_strs = check_expr(deptree, &expr.deref(), node_id);
-            deptree[node_id].get_env_mut().merge(dep_strs.clone());
-            dep_strs
-        },
+            // Check expression
+            let mut subtree = vec![];
+            let env = check_expr(&mut subtree, &expr.deref());
 
+            // Add Expr or ExprBlock into dependency tree
+            if subtree.len() == 0 {
+                deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![], env.clone()));
+            } else {
+                deptree.push(DependencyNode::ExprBlock(remove_blocks(&stmt), subtree, vec![], env.clone()));
+            }
+            env
+        },
 
         StmtKind::Item(ref item) => {
             println!("ITEM: {:?}", item);
@@ -488,7 +501,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Environment {
     }
 }
 
-fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Environment {
+fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> Environment {
     let mut dependencies = vec![];
     let subexprs: Vec<P<Expr>> = {
         match expr.node {
@@ -533,7 +546,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Envi
             ExprKind::If(ref expr1, ref block1, ref mexpr2) |
             ExprKind::IfLet(_, ref expr1, ref block1, ref mexpr2) => {
                 let subdeptree = analyse_block(block1);
-                deptree.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![node_id], Environment::empty()));
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], Environment::empty()));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 if let &Some(ref expr2) = mexpr2 {
                     vec![expr1.clone(), expr2.clone()]
@@ -546,7 +559,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Envi
             ExprKind::WhileLet(_, ref expr1, ref block1, _) |
             ExprKind::ForLoop(_, ref expr1, ref block1, _) => {
                 let subdeptree = analyse_block(block1);
-                deptree.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![node_id], Environment::empty()));
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], Environment::empty()));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![expr1.clone()]
             },
@@ -555,7 +568,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Envi
             ExprKind::Block(ref block1) |
             ExprKind::Catch(ref block1) => {
                 let subdeptree = analyse_block(block1);
-                deptree.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![node_id], Environment::empty()));
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], Environment::empty()));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![]
             },
@@ -600,7 +613,7 @@ fn check_expr(deptree: &mut DependencyTree, expr: &Expr, node_id: usize) -> Envi
 
     // Create list of stuff that is touched
     for subexpr in &subexprs {
-        dependencies.extend(check_expr(deptree, subexpr, node_id).0);
+        dependencies.extend(check_expr(sub_blocks, subexpr).0);
     }
 
     // Return our dependency list to include those statements

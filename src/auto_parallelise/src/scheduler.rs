@@ -28,7 +28,7 @@ pub enum ScheduleTree<'a> {
 }
 
 impl<'a> ScheduleTree<'a>{
-    fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode,) -> Self {
+    fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode) -> Self {
         if prereqs.len() > 0 {
             println!("Got a prereq: {:?}, for node {:?}", prereqs, node);
         }
@@ -239,7 +239,7 @@ fn performance_metric(node: &DependencyNode) -> u32 {
         &DependencyNode::Expr(_, _, _) => 1,
         &DependencyNode::ExprBlock(_, ref nodes,_, _) |
         &DependencyNode::Block(_, ref nodes,_, _) => {
-            let mut total = 0;
+            let mut total = 1;
             for node in nodes {
                 total += performance_metric(node);
             }

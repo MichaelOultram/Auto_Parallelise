@@ -1,6 +1,6 @@
 use syntax::codemap::Span;
 use syntax::ptr::P;
-use syntax::ast::{self, Stmt, Block, Item, ItemKind, Ident};
+use syntax::ast::{self, Stmt, StmtKind, Expr, ExprKind, Block, Item, ItemKind, Ident};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
 use syntax::print::pprust;
 use std::ops::Deref;
@@ -9,7 +9,7 @@ use serde_json;
 
 use AutoParallelise;
 use CompilerStage;
-use dependency_analysis;
+use dependency_analysis::{self, DependencyNode};
 use shared_state::Function;
 use scheduler::{self, ScheduleTree};
 
@@ -160,11 +160,16 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
                     let stmt = spanning_tree.node.get_stmt().unwrap().deref().clone();
                     thread_contents.push(stmt);
                 }
-                ScheduleTree::Block(_, _, ref schedule) => {
+                ScheduleTree::Block(_, ref spanning_tree, ref schedule) => {
                     // Add block to the schedule
                     let mut inner_block = spawn_from_schedule(cx, schedule.list());
-                    let block = create_block(cx, inner_block);
-                    let stmt = quote_stmt!(cx, $block).unwrap();
+                    let exprblock = create_block(cx, inner_block);
+                    let mut mnode_stmt = spanning_tree.node.get_stmt();
+                    let stmt = if let Some(node_stmt) = mnode_stmt {
+                        exprblock_into_statement(node_stmt.deref().clone(), exprblock)
+                    } else {
+                        quote_stmt!(cx, $exprblock).unwrap()
+                    };
                     thread_contents.push(stmt);
                 }
                 ScheduleTree::SyncTo(_, _, _) => panic!("Unreachable case"),
@@ -195,4 +200,57 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
     }
 
     output
+}
+
+fn exprblock_into_statement(exprstmt: Stmt, exprblock: Block) -> Stmt {
+    // Extract expr
+    let expr = match exprstmt.node {
+        StmtKind::Local(ref local) =>
+            if let Some(ref expr) = local.init {
+                expr
+            } else {
+                panic!("No expression");
+            },
+
+        // A line in a function
+        StmtKind::Expr(ref expr) |
+        StmtKind::Semi(ref expr) => expr,
+        _ => panic!("Unexpected StmtKind"),
+    };
+
+    // Create new exprnode with exprblock
+    let new_exprnode = match expr.node {
+        ExprKind::If(ref a, _, ref c) => ExprKind::If(a.clone(), P(exprblock), c.clone()),
+        ExprKind::IfLet(ref a, ref b, _, ref c) => ExprKind::IfLet(a.clone(), b.clone(), P(exprblock), c.clone()),
+        ExprKind::While(ref a, _, ref b) => ExprKind::While(a.clone(), P(exprblock), b.clone()) ,
+        ExprKind::WhileLet(ref a, ref b, _, ref c) => ExprKind::WhileLet(a.clone(), b.clone(), P(exprblock), c.clone()),
+        ExprKind::ForLoop(ref a, ref b, _, ref c) => ExprKind::ForLoop(a.clone(), b.clone(), P(exprblock), c.clone()),
+        ExprKind::Loop(_, ref a) => ExprKind::Loop(P(exprblock), a.clone()),
+        ExprKind::Block(_) => ExprKind::Block(P(exprblock)),
+        ExprKind::Catch(_) => ExprKind::Catch(P(exprblock)),
+        _ => panic!("Unexpected ExprKind"),
+    };
+
+    // Create new expr
+    let mut new_expr = expr.deref().clone();
+    new_expr.node = new_exprnode;
+
+    // Wrap new_exprnode in a new stmtkind
+    let new_stmtkind = match exprstmt.node {
+        StmtKind::Local(ref local) => {
+            let mut local = local.deref().clone();
+            local.init = Some(P(new_expr));
+            StmtKind::Local(P(local))
+        },
+        StmtKind::Expr(_) => StmtKind::Expr(P(new_expr)),
+        StmtKind::Semi(_) => StmtKind::Semi(P(new_expr)),
+        _ => panic!("Unexpected StmtKind"),
+    };
+
+    // Create new statment out of stmtkind
+    let mut new_stmt = exprstmt.clone();
+    new_stmt.node = new_stmtkind;
+
+    // Return new statement
+    new_stmt
 }
