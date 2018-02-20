@@ -3,6 +3,8 @@ use syntax::ast;
 use syntax_pos::Span;
 use syntax::visit::{self, FnKind};
 
+use serde_json;
+
 use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
@@ -37,7 +39,11 @@ impl EarlyLintPass for AutoParallelise {
                 let deptree = dependency_analysis::analyse_block(&_block);
                 println!("DEPTREE:");
                 for node in &deptree {
-                    println!("{:?}", node);
+                    let node_json = match serde_json::to_string_pretty(&node) {
+                        Ok(obj) => obj,
+                        Err(why) => panic!("Unable to convert deptree to JSON: {}", why),
+                    };
+                    println!("{}", node_json);
                 }
 
                 // convert deptree into encoded_deptree

@@ -55,7 +55,11 @@ impl MultiItemModifier for AutoParallelise {
 
                     println!("DEPTREE:");
                     for node in &base_deptree {
-                        println!("{:?}", node);
+                        let node_json = match serde_json::to_string_pretty(&node) {
+                            Ok(obj) => obj,
+                            Err(why) => panic!("Unable to convert deptree to JSON: {}", why),
+                        };
+                        println!("{}", node_json);
                     }
 
                     // Produce a schedule

@@ -104,12 +104,12 @@ impl Serialize for DependencyNode {
                 state.end()
             },
             &DependencyNode::Block(ref stmt, ref tree, ref deps, ref env) => {
-                let mut state = serializer.serialize_struct("Block", 2)?;
+                let mut state = serializer.serialize_struct("Block", 3)?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
+                state.serialize_field("subtree", tree)?;
                 state.serialize_field("env", env)?;
                 //state.serialize_field("stmt", &format!("{:?}", stmt))?;
                 //state.serialize_field("deps", deps)?;
-                //state.serialize_field("subtree", tree)?;
                 state.end()
             },
             &DependencyNode::ExprBlock(ref stmt, ref tree, ref deps, ref env) => {
@@ -378,14 +378,20 @@ fn remove_blocks(stmt: &Stmt) -> P<Stmt> {
 }
 
 pub fn analyse_block(block: &Block) -> DependencyTree {
+    let (deptree, _) = analyse_block_with_env(block);
+    deptree
+}
+
+fn analyse_block_with_env(block: &Block) -> (DependencyTree, Environment) {
     let (mut deptree, depstrtree) = check_block(block);
+    let mut env = Environment::empty();
 
     // Examine dep_strs to find the statement indicies
     //println!("depstrtree: {:?}", depstrtree);
-    for id in 1..deptree.len() { // 0 cannot have anything depending before it.
+    for id in 0..deptree.len() {
         let mut deps: Vec<usize> = vec![];
         let mut depstrs: Environment = depstrtree[id].clone();
-
+        env.merge(depstrs.clone());
         // find the first instance of each variable from this point (-1)
         // backwards to the start of depstrtree
         for backid in (0..id).rev() {
@@ -415,7 +421,7 @@ pub fn analyse_block(block: &Block) -> DependencyTree {
 
     }
 
-    deptree
+    (deptree, env)
 }
 
 fn check_block(block: &Block) -> (DependencyTree, Vec<Environment>) {
@@ -464,6 +470,10 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Environment {
                 if subtree.len() == 0 {
                     deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![], env.clone()));
                 } else {
+                    // Get environment of inner block
+                    for v in &subtree {
+                        env.merge(v.get_env().clone());
+                    }
                     deptree.push(DependencyNode::ExprBlock(remove_blocks(&stmt), subtree, vec![], env.clone()));
                 }
                 env
@@ -477,12 +487,16 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Environment {
         StmtKind::Semi(ref expr) => {
             // Check expression
             let mut subtree = vec![];
-            let env = check_expr(&mut subtree, &expr.deref());
+            let mut env = check_expr(&mut subtree, &expr.deref());
 
             // Add Expr or ExprBlock into dependency tree
             if subtree.len() == 0 {
                 deptree.push(DependencyNode::Expr(remove_blocks(&stmt), vec![], env.clone()));
             } else {
+                // Get environment of inner block
+                for v in &subtree {
+                    env.merge(v.get_env().clone());
+                }
                 deptree.push(DependencyNode::ExprBlock(remove_blocks(&stmt), subtree, vec![], env.clone()));
             }
             env
@@ -494,7 +508,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> Environment {
         },
 
         // Macros should be expanded by this point
-        StmtKind::Mac(ref mac) => {
+        StmtKind::Mac(_) => {
             deptree.push(DependencyNode::Mac(P(stmt.clone()), vec![], Environment::empty()));
             Environment::empty()
         },
@@ -545,8 +559,9 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> Environment {
 
             ExprKind::If(ref expr1, ref block1, ref mexpr2) |
             ExprKind::IfLet(_, ref expr1, ref block1, ref mexpr2) => {
-                let subdeptree = analyse_block(block1);
-                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], Environment::empty()));
+                let (subdeptree, sub_env) = analyse_block_with_env(block1);
+                dependencies.extend(sub_env.clone().0);
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], sub_env));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 if let &Some(ref expr2) = mexpr2 {
                     vec![expr1.clone(), expr2.clone()]
@@ -558,8 +573,9 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> Environment {
             ExprKind::While(ref expr1, ref block1, _) |
             ExprKind::WhileLet(_, ref expr1, ref block1, _) |
             ExprKind::ForLoop(_, ref expr1, ref block1, _) => {
-                let subdeptree = analyse_block(block1);
-                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], Environment::empty()));
+                let (subdeptree, sub_env) = analyse_block_with_env(block1);
+                dependencies.extend(sub_env.clone().0);
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], sub_env));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![expr1.clone()]
             },
@@ -567,8 +583,9 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> Environment {
             ExprKind::Loop(ref block1, _) |
             ExprKind::Block(ref block1) |
             ExprKind::Catch(ref block1) => {
-                let subdeptree = analyse_block(block1);
-                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], Environment::empty()));
+                let (subdeptree, sub_env) = analyse_block_with_env(block1);
+                dependencies.extend(sub_env.clone().0);
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], sub_env));
                 // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![]
             },
@@ -584,8 +601,7 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> Environment {
                 exprs
             },
 
-            ExprKind::Closure(_, _, ref fndecl, ref expr1, _) => {
-                // TODO: Use fndecl
+            ExprKind::Closure(_, _, _, ref expr1, _) => {
                 vec![expr1.clone()]
             },
 
@@ -605,9 +621,12 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> Environment {
                 vec![]
             },
 
+            // Independent base expressions
+            ExprKind::Lit(_) |
+            ExprKind::Mac(_) => vec![],
 
             // Unused expressions, panic if used
-            _ => vec![],
+            _ => panic!(format!("Unmatched expression: {:?}", expr.node)),
         }
     };
 
