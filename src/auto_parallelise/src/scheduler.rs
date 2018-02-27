@@ -4,7 +4,7 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);
 impl<'a> Schedule<'a> {
-    pub fn get_all_synclines(&self) -> Vec<(StmtID, StmtID)> {
+    pub fn get_all_synclines(&self) -> Vec<(StmtID, StmtID, &Environment)> {
         let mut synclines = vec![];
         for tree in &(self.0) {
             synclines.append(&mut tree.get_all_synclines());
@@ -75,7 +75,7 @@ impl<'a> ScheduleTree<'a>{
         }
     }
 
-    fn get_all_synclines(&self) -> Vec<(StmtID, StmtID)> {
+    fn get_all_synclines(&self) -> Vec<(StmtID, StmtID, &Environment)> {
         let mut synclines = vec![];
         match self {
             &ScheduleTree::Node(_, ref tree) |
@@ -84,7 +84,7 @@ impl<'a> ScheduleTree<'a>{
                     synclines.append(&mut child.get_all_synclines())
                 }
             },
-            &ScheduleTree::SyncTo(from, to, _) => synclines.push((from, to)),
+            &ScheduleTree::SyncTo(from, to, ref env) => synclines.push((from, to, env)),
         }
         synclines
     }
@@ -126,8 +126,8 @@ impl<'a> SpanningTree<'a> {
         self.children.push(ScheduleTree::new(prereqs, node));
     }
 
-    fn add_sync_to(&mut self, pre: StmtID, node: StmtID) {
-        self.children.push(ScheduleTree::SyncTo(pre, node, Environment::empty()));
+    fn add_sync_to(&mut self, pre: StmtID, node: StmtID, env: Environment) {
+        self.children.push(ScheduleTree::SyncTo(pre, node, env));
     }
 
 }
@@ -165,6 +165,9 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
         // Add the node to the longest dependency
 
         dependent_nodes.retain(|&(ref node, ref deps_stmtids)| {
+            let node_envin = node.get_env().0.clone();
+            println!("node_envin: {:?}", node_envin);
+
             // If they have a single dependency
             let mut best_nodes_ids = vec![]; // (TreeID,Weight)
             let mut all_deps_added = true;
@@ -214,7 +217,19 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                             if let Some(child_tree) = schedule_trees[node_tree_id].get_spanning_tree_mut() {
                                 let result = child_tree.get_by_stmtid(node_stmtid);
                                 if let Some(tree_node) = result {
-                                    tree_node.add_sync_to(node_stmtid, node.get_stmtid());
+                                    // Get outenv for tree_node
+                                    let &(_, ref treeoutenv) = tree_node.node.get_env();
+                                    println!("tree_node: {:?}", tree_node.node);
+                                    println!("treeoutenv: {:?}", treeoutenv);
+                                    // Remove all the elements that this satisfes
+                                    let mut diff_env = treeoutenv.clone();
+                                    diff_env.remove_env(node_envin.clone());
+                                    println!("treeoutenv-node_envin: {:?}", diff_env);
+                                    // Want to keep removed elements from diff_env
+                                    let mut sync_env = treeoutenv.clone();
+                                    sync_env.remove_env(diff_env);
+                                    println!("sync_env: {:?}", sync_env);
+                                    tree_node.add_sync_to(node_stmtid, node.get_stmtid(), sync_env);
                                     prereqs.push(node_stmtid);
                                 } else {
                                     panic!();
