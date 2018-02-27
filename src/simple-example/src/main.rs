@@ -8,6 +8,9 @@ fn main() {
     let mut c = 5;
     a += 1;
     b += 1;
-    println!("{} * {}", a, c);
+    for i in 0..a {
+        println!("Hello world");
+        println!("{} * {}", a, c);
+    }
     println!("{} + {}", a, b);
 }

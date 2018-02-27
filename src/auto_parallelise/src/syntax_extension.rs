@@ -24,6 +24,14 @@ fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
     }
 }
 
+fn create_thread(cx: &mut ExtCtxt, lo: u32, hi: u32, thread_contents: Vec<Stmt>) -> (Ident, Stmt){
+    let thread_sname = format!("thread_{}_{}", lo, hi);
+    let thread_name = Ident::from_str(&thread_sname);
+    let thread_block = create_block(cx, thread_contents);
+    let thread_stmt = quote_stmt!(cx, let $thread_name = std::thread::spawn(move || $thread_block);).unwrap();
+    (thread_name, thread_stmt)
+}
+
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, cx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
         // Only make changes when on the Modification stage
@@ -170,7 +178,9 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
                     let exprblock = create_block(cx, inner_block);
                     let mut mnode_stmt = spanning_tree.node.get_stmt();
                     let stmt = if let Some(node_stmt) = mnode_stmt {
-                        exprblock_into_statement(node_stmt.deref().clone(), exprblock)
+                        // If the block has no external dependencies, then it can be run in parallel
+                        let (ref inenv, _) = schedule.get_env();
+                        exprblock_into_statement(node_stmt.deref().clone(), exprblock, inenv.len() == 0)
                     } else {
                         quote_stmt!(cx, $exprblock).unwrap()
                     };
@@ -187,10 +197,7 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
                 output.append(&mut thread_contents);
             } else {
                 // All execpt the last is put into a concurrent thread
-                let thread_sname = format!("thread_{}_{}", lo, hi);
-                let thread_name = Ident::from_str(&thread_sname);
-                let thread_block = create_block(cx, thread_contents);
-                let thread_stmt = quote_stmt!(cx, let $thread_name = std::thread::spawn(move || $thread_block);).unwrap();
+                let (thread_name, thread_stmt) = create_thread(cx, lo, hi, thread_contents);
                 output.push(thread_stmt);
                 threads.push(thread_name);
             }
@@ -206,7 +213,8 @@ fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>) -> Vec
     output
 }
 
-fn exprblock_into_statement(exprstmt: Stmt, exprblock: Block) -> Stmt {
+fn exprblock_into_statement(exprstmt: Stmt, exprblock: Block, parallel: bool) -> Stmt {
+    println!("Parallel block: {}", parallel); //TODO: Make exprblock run in parallel if parallel
     // Extract expr
     let expr = match exprstmt.node {
         StmtKind::Local(ref local) =>

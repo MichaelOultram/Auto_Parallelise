@@ -1,4 +1,4 @@
-use dependency_analysis::{DependencyTree, DependencyNode, StmtID, Environment};
+use dependency_analysis::{DependencyTree, DependencyNode, StmtID, Environment, InOutEnvironment};
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -10,6 +10,19 @@ impl<'a> Schedule<'a> {
             synclines.append(&mut tree.get_all_synclines());
         }
         synclines
+    }
+
+    pub fn get_env(&self) -> InOutEnvironment {
+        let (mut inenv, mut outenv) = (Environment::empty(), Environment::empty());
+        for schtree in &(self.0) {
+            if let Some(span_tree) = schtree.get_spanning_tree() {
+                let &(ref subinenv, ref suboutenv) = span_tree.node.get_env();
+                outenv.remove_env(subinenv.clone());
+                inenv.merge(subinenv.clone()); // TODO: May add a dependency which does not exist
+                outenv.merge(suboutenv.clone());
+            }
+        }
+        (inenv, outenv)
     }
 
     pub fn list(&self) -> &Vec<ScheduleTree<'a>> {
@@ -45,7 +58,16 @@ impl<'a> ScheduleTree<'a>{
         }
     }
 
-    pub fn get_spanning_tree(&mut self) -> Option<&mut SpanningTree<'a>> {
+
+    pub fn get_spanning_tree(&self) -> Option<&SpanningTree<'a>> {
+        match self {
+            &ScheduleTree::Node(_, ref tree) |
+            &ScheduleTree::Block(_, ref tree, _) => Some(tree),
+            _ => None,
+        }
+    }
+
+    pub fn get_spanning_tree_mut(&mut self) -> Option<&mut SpanningTree<'a>> {
         match self {
             &mut ScheduleTree::Node(_, ref mut tree) |
             &mut ScheduleTree::Block(_, ref mut tree, _) => Some(tree),
@@ -89,7 +111,7 @@ impl<'a> SpanningTree<'a> {
             return Some(self);
         } else {
             for child in &mut self.children {
-                if let Some(child_tree) = child.get_spanning_tree() {
+                if let Some(child_tree) = child.get_spanning_tree_mut() {
                     let result = child_tree.get_by_stmtid(stmtid);
                     if let Some(_) = result {
                         return result;
@@ -151,7 +173,7 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                 // Find the tree nodes that the dependency matches
                 let mut tree_id_pair: Option<(StmtID,usize,u32)> = None;
                 for tree_id in 0..schedule_trees.len() {
-                    if let Some(child_tree) = schedule_trees[tree_id].get_spanning_tree() {
+                    if let Some(child_tree) = schedule_trees[tree_id].get_spanning_tree_mut() {
                         let result = child_tree.get_by_stmtid(*dep_stmtid);
                         if let Some(_) = result {
                             tree_id_pair = Some((*dep_stmtid,tree_id,0));//TODO: add weight
@@ -189,7 +211,7 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                         // Check that this node is not the best node
                         if node_stmtid != best_stmtid {
                             // Get the dependency node on the tree
-                            if let Some(child_tree) = schedule_trees[node_tree_id].get_spanning_tree() {
+                            if let Some(child_tree) = schedule_trees[node_tree_id].get_spanning_tree_mut() {
                                 let result = child_tree.get_by_stmtid(node_stmtid);
                                 if let Some(tree_node) = result {
                                     tree_node.add_sync_to(node_stmtid, node.get_stmtid());
@@ -208,7 +230,7 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                     }
 
                     // Add node to best branch
-                    if let Some(child_tree) = schedule_trees[best_tree_id].get_spanning_tree() {
+                    if let Some(child_tree) = schedule_trees[best_tree_id].get_spanning_tree_mut() {
                         let result = child_tree.get_by_stmtid(best_stmtid);
                         if let Some(tree_node) = result {
                             tree_node.add_child(prereqs, node);
