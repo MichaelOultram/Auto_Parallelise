@@ -8,6 +8,7 @@ use serde_json;
 use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
+use dot;
 use shared_state::{Function};
 
 impl LintPass for AutoParallelise {

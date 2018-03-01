@@ -37,7 +37,7 @@ pub enum ScheduleTree<'a> {
     // Prerequisite dependencies, Current Statement + Children, Inner Block Schedule
     Block(Vec<StmtID>, SpanningTree<'a>, Schedule<'a>),
     // Node to wait for the dependency
-    SyncTo(StmtID, StmtID, Environment), // TODO: Include list of variables sent over the channel
+    SyncTo(StmtID, StmtID, Environment),
 }
 
 impl<'a> ScheduleTree<'a>{

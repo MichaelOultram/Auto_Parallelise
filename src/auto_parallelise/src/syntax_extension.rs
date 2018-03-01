@@ -9,6 +9,7 @@ use serde_json;
 
 use AutoParallelise;
 use CompilerStage;
+use dot;
 use dependency_analysis::{self, DependencyNode, Environment};
 use shared_state::Function;
 use scheduler::{self, ScheduleTree};
@@ -53,6 +54,9 @@ impl MultiItemModifier for AutoParallelise {
                         println!("{}", node_json);
                     }
 
+                    println!("DOT deptree output:");
+                    println!("{}", dot::deptree_to_dot(&base_deptree));
+
                     // Produce a schedule
                     let schedule = scheduler::create_schedule(&base_deptree);
                     let schedule_json = match serde_json::to_string_pretty(&schedule) {
@@ -60,6 +64,9 @@ impl MultiItemModifier for AutoParallelise {
                         Err(why) => panic!("Unable to convert AutoParallelise to JSON: {}", why),
                     };
                     println!("SCHEDULE:\n{}\n", schedule_json);
+
+                    println!("DOT schedule output:");
+                    println!("{}", dot::schedule_to_dot(&base_deptree));
 
                     // Convert schedule into multi-threadded code
 

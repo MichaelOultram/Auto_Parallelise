@@ -5,12 +5,12 @@
 fn main() {
     let mut a = 4;
     let mut b = 3;
-    //let mut c = 5;
+    let mut c = 5;
     a += 1;
     b += 1;
-    //for i in 0..a {
-    //    println!("Hello world");
-    //    println!("{} * {}", a, c);
-    //}
+    for i in 0..a {
+        println!("Hello world");
+        println!("{} * {}", a, c);
+    }
     println!("{} + {}", a, b);
 }
