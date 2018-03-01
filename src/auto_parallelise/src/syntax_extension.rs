@@ -66,7 +66,7 @@ impl MultiItemModifier for AutoParallelise {
                     println!("SCHEDULE:\n{}\n", schedule_json);
 
                     println!("DOT schedule output:");
-                    println!("{}", dot::schedule_to_dot(&base_deptree));
+                    println!("{}", dot::schedule_to_dot(&schedule));
 
                     // Convert schedule into multi-threadded code
 
