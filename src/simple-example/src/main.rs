@@ -10,7 +10,8 @@ fn main() {
     b += 1;
     for i in 0..a {
         println!("Hello world");
-        println!("{} * {}", a, c);
     }
+    println!("{} * {}", a, c);
     println!("{} + {}", a, b);
+    println!("End of program");
 }

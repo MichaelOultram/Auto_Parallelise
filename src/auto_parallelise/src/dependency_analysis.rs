@@ -109,7 +109,7 @@ impl Serialize for DependencyNode {
             &DependencyNode::Expr(ref stmt, ref deps, ref env) => {
                 let mut state = serializer.serialize_struct("Expr", 4)?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
-                state.serialize_field("stmt", &format!("{:?}", stmt))?;
+                state.serialize_field("stmt", &pprust::stmt_to_string(stmt))?;
                 state.serialize_field("deps", deps)?;
                 state.serialize_field("env", env)?;
                 state.end()
@@ -126,7 +126,7 @@ impl Serialize for DependencyNode {
             &DependencyNode::ExprBlock(ref stmt, ref tree, ref deps, ref env) => {
                 let mut state = serializer.serialize_struct("ExprBlock", 5)?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
-                state.serialize_field("stmt", &format!("{:?}", stmt))?;
+                state.serialize_field("stmt", &pprust::stmt_to_string(stmt))?;
                 state.serialize_field("deps", deps)?;
                 state.serialize_field("subtree", tree)?;
                 state.serialize_field("env", env)?;
@@ -135,7 +135,7 @@ impl Serialize for DependencyNode {
             &DependencyNode::Mac(ref stmt, ref deps, ref env) => {
                 let mut state = serializer.serialize_struct("Mac", 4)?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
-                state.serialize_field("stmt", &format!("{:?}", stmt))?;
+                state.serialize_field("stmt", &pprust::stmt_to_string(stmt))?;
                 state.serialize_field("deps", deps)?;
                 state.serialize_field("env", env)?;
                 state.end()
@@ -666,6 +666,31 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
             ExprKind::Match(ref expr1, ref arml) => {
                 let mut exprs = vec![expr1.clone()];
                 for arm in arml.deref() {
+                    let mut guardsubblocks = vec![];
+                    let mut bodysubblocks = vec![];
+
+                    // Check the arm body
+                    let (mut bodyinenv, bodyoutenv) = check_expr(&mut bodysubblocks, arm.body.deref());
+
+                    // If there is a guard, check it
+                    if let Some(ref guard) = arm.guard {
+                        let (mut guardinenv, guardoutenv) = check_expr(&mut guardsubblocks, guard.deref());
+
+                        dependencies.extend(guardinenv.0.clone());
+                        produces.extend(guardinenv.0); // Naively assume that we release all dependencies
+
+                        // Guard supplies some of bodies dependencies
+                        bodyinenv.remove(guardoutenv.0);
+                    }
+
+                    dependencies.extend(bodyinenv.0.clone());
+                    produces.extend(bodyinenv.0); // Naively assume that we release all dependencies
+                    produces.extend(bodyoutenv.0); // TODO: Does bodyoutenv make sense (it is probably empty)
+
+                    // Push sub_blocks in correct order
+                    sub_blocks.append(&mut guardsubblocks);
+                    sub_blocks.append(&mut bodysubblocks);
+
                     exprs.push(arm.body.clone());
                     if let Some(ref guard) = arm.guard {
                         exprs.push(guard.clone());
