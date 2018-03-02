@@ -32,6 +32,7 @@ impl MultiItemModifier for AutoParallelise {
 
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
                 println!("{:?}", _fndecl); // Function decl
+                println!("Unsafety: {}", _unsafety);
 
                 // Find function from analysed stage
                 let mut maybe_analysed_function: Option<&Function> = None;
@@ -69,39 +70,21 @@ impl MultiItemModifier for AutoParallelise {
                     println!("{}", dot::schedule_to_dot(&schedule));
 
                     // Convert schedule into multi-threadded code
-
-                    // Gather all the synclines and create them as variables
-                    let synclines = schedule.get_all_synclines();
-                    println!("Synclines:\n{:?}\n", synclines);
-                    let mut stmts = vec![];
-                    for ((to_a, to_b), (from_a, from_b), _) in synclines.clone() {
-                        let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
-                        let sx = Ident::from_str(&format!("{}_send", line_name));
-                        let rx = Ident::from_str(&format!("{}_receive", line_name));
-                        let stmt = quote_stmt!(cx, let ($sx, $rx) = std::sync::mpsc::channel()).unwrap();
-                        stmts.push(stmt);
-                    }
-                    stmts.append(&mut reconstructor::spawn_from_schedule(cx, schedule.list(), &synclines));
-
-                    let new_block = reconstructor::create_block(cx, stmts);
-
+                    let parstmts = reconstructor::spawn_from_schedule(cx, schedule);
+                    let parblock = reconstructor::create_block(cx, parstmts);
+                    let parthread = quote_stmt!(cx, ::std::thread::spawn(move || $parblock)).unwrap();
+                    let parthreadblock = reconstructor::create_block(cx, vec![parthread]);
                     // Convert function into use new_block
-                    let new_func = ItemKind::Fn(_fndecl.clone(), *_unsafety, *_constness, *_abi, _generics.clone(), P(new_block));
+                    let (parident, parfunction) = reconstructor::create_function(cx, item, &format!("{}_parallel", func_name), true, parthreadblock);
+                    let seqstmts = vec![quote_stmt!(cx,$parident().join().unwrap()).unwrap()]; // TODO Pass parameters to $parident
+                    let seqblock = reconstructor::create_block(cx, seqstmts);
+                    let (seqident, seqfunction) = reconstructor::create_function(cx, item, &func_name, false, seqblock);
 
-                    let new_item = Item {
-                        attrs: item.attrs.clone(),
-                        id: item.id,
-                        ident: item.ident,
-                        node: new_func,
-                        span: item.span,
-                        tokens: item.tokens.clone(),
-                        vis: item.vis.clone(),
-                    };
                     // Prints the function
-                    println!("converted_function:\n{}\n", pprust::item_to_string(&new_item));
+                    println!("converted_function:\n{}\n{}", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
 
-                    let anno_item = Annotatable::Item(P(new_item));
-                    output.push(anno_item);
+                    output.push(Annotatable::Item(P(parfunction)));
+                    output.push(Annotatable::Item(P(seqfunction)));
                 } else {
                     panic!("{} was not found as an analysed function", func_name);
                 }

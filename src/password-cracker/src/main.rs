@@ -21,64 +21,49 @@ fn load_dictionary() -> Vec<String> {
         dict.push(l);
     }
 
-    dict
+    return dict;
 }
 
 #[autoparallelise]
-fn crack_password(dictionary: &Vec<String>, hash_password: String) -> Option<String>{
-    for word in dictionary {
-        // Hash word using Sha256
-        let mut hash_word: String = word.clone();
-        for _ in 0..40 {
-            let mut hasher = Sha256::new();
-            hasher.input_str(&hash_word);
-            hash_word = hasher.result_str();
-        }
-
-        // Check if hash matches
-        if hash_password == hash_word {
-            return Some(word.clone());
-        }
-    }
-    None
-}
-
-#[autoparallelise]
-fn crack_password_single(word: String, hash_password: String) -> bool {
+fn hash(word: String) -> String {
     // Hash word using Sha256
-    let mut hash_word: String = word.clone();
     for _ in 0..40 {
         let mut hasher = Sha256::new();
-        hasher.input_str(&hash_word);
-        hash_word = hasher.result_str();
+        hasher.input_str(&word);
+        word = hasher.result_str();
     }
 
-    // Check if hash matches
-    hash_password == hash_word
+    return word;
 }
 
+#[autoparallelise]
+fn crack_password(dictionary: Vec<String>, password_hash: String) -> Option<String> {
+    let mut hashes = vec![];
+    for id in 0..dictionary.len() {
+        let word = dictionary[id];
+        let word_hash = hash(word);
+        hashes.push(word_hash);
+    }
+
+    for id in 0..dictionary.len() {
+        let word_hash = hashes[id];
+        if word_hash == password_hash {
+            let word = dictionary[id];
+            return Some(word);
+        }
+    }
+    return None;
+}
 
 #[autoparallelise]
 fn main() {
     let now = Instant::now();
+    println!("Start");
 
     let dictionary = load_dictionary();
-    let hash_password = format!("be9f36142cf64f3804323c8f29bc5822d01e60f7849244c59ff42de38d11fa37");
+    let password_hash = format!("be9f36142cf64f3804323c8f29bc5822d01e60f7849244c59ff42de38d11fa37");
 
-    for word in dictionary {
-        if crack_password_single(word, hash_password) {
-            println!("Found password: {}", word);
-            break;
-        }
-    }
-
-    /*
-    let password = crack_password(&dictionary, hash_password);
-    match password {
-        Some(word) => println!("Found password: {}", word),
-        None => println!("Could not find password"),
-    }
-    */
+    crack_password(dictionary, password_hash);
 
     println!("Done");
     let elapsed = now.elapsed();

@@ -1,11 +1,11 @@
 use syntax::ptr::P;
-use syntax::ast::{Stmt, StmtKind, Expr, ExprKind, Block, Ident};
+use syntax::ast::{Stmt, StmtKind, Expr, ExprKind, Block, Ident, Item, ItemKind};
 use syntax::ext::base::{ExtCtxt};
 use syntax::print::pprust;
 use std::ops::Deref;
 
 use dependency_analysis::{Environment, PathName, StmtID};
-use scheduler::ScheduleTree;
+use scheduler::{Schedule, ScheduleTree};
 
 pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
     let block = quote_block!(cx, {});
@@ -25,6 +25,30 @@ pub fn create_path(cx: &mut ExtCtxt, pathname: PathName) -> P<Expr> {
     }
     let var_name = Ident::from_str(&str_name);
     quote_expr!(cx,$var_name)
+}
+
+pub fn create_function(cx: &mut ExtCtxt, item: &Item, func_name: &str, join_handle: bool, body: Block) -> (Ident, Item) {
+    if let ItemKind::Fn(ref fndecl, ref unsafety, ref constness, ref abi, ref generics, _) = item.node {
+        let mut new_fndecl = fndecl.deref().clone();
+        if join_handle {
+            // TODO: Change the return type to JoinHandle<ReturnType>
+        }
+
+        let new_func = ItemKind::Fn(P(new_fndecl), *unsafety, *constness, *abi, generics.clone(), P(body));
+        let ident = Ident::from_str(func_name);
+        let item = Item {
+            attrs: item.attrs.clone(),
+            id: item.id,
+            ident: ident.clone(),
+            node: new_func,
+            span: item.span,
+            tokens: item.tokens.clone(),
+            vis: item.vis.clone(),
+        };
+        (ident, item)
+    } else {
+        panic!("Invalid ItemKind given to create_function")
+    }
 }
 
 fn create_thread(cx: &mut ExtCtxt, lo: u32, hi: u32, thread_contents: Vec<Stmt>) -> (Ident, Stmt){
@@ -57,7 +81,29 @@ fn syncline_env(synclines: &Vec<(StmtID, StmtID, &Environment)>, to_a: u32, to_b
     panic!("Cannot find syncline and so cannot return environment")
 }
 
-pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, all_synclines: &Vec<(StmtID, StmtID, &Environment)>) -> Vec<Stmt> {
+pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt> {
+    // Gather all the synclines and create them as variables
+    let synclines = schedule.get_all_synclines();
+    println!("Synclines:\n{:?}\n", synclines);
+    let mut stmts = vec![];
+    for ((to_a, to_b), (from_a, from_b), _) in synclines.clone() {
+        let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+        let sx = Ident::from_str(&format!("{}_send", line_name));
+        let rx = Ident::from_str(&format!("{}_receive", line_name));
+        let stmt = quote_stmt!(cx, let ($sx, $rx) = std::sync::mpsc::channel()).unwrap();
+        stmts.push(stmt);
+    }
+    let mut body: Vec<Stmt> = spawn_from_schedule_helper(cx, schedule.list(), &synclines);
+    stmts.append(&mut body);
+    stmts
+}
+
+pub fn call_join_seq_fn(seq_fn_name: Ident) -> Stmt {
+    // Creates a function with calls a parallel function and waits for it's output.
+    unimplemented!()
+}
+
+fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, all_synclines: &Vec<(StmtID, StmtID, &Environment)>) -> Vec<Stmt> {
     let mut output = vec![];
     let mut threads = vec![];
 
@@ -94,7 +140,7 @@ pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, al
                     }
 
                     // Spawn children after node
-                    let children = spawn_from_schedule(cx, &spanning_tree.children, all_synclines);
+                    let children = spawn_from_schedule_helper(cx, &spanning_tree.children, all_synclines);
 
                     // Return node id
                     (spanning_tree.node.get_stmtid(), children)
@@ -111,7 +157,7 @@ pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, al
                 }
                 ScheduleTree::Block(_, ref spanning_tree, ref schedule) => {
                     // Add block to the schedule
-                    let mut inner_block = spawn_from_schedule(cx, schedule.list(), all_synclines);
+                    let mut inner_block = spawn_from_schedule_helper(cx, schedule.list(), all_synclines);
                     let exprblock = create_block(cx, inner_block);
                     let mut mnode_stmt = spanning_tree.node.get_stmt();
                     let stmt = if let Some(node_stmt) = mnode_stmt {
