@@ -1,6 +1,17 @@
 \chapter{Design}
+\todo{Explain rust compiler plugin types. Why we compile twice, etc.}
+\todo{Justify all decisions. Explain alternatives considered/implemented and why the design changed}
+
+The rust compiler allows for plugins of different types. The two types of plugins used are Syntax Extension plugin and a Linter Plugin. Syntax Extension plugins are run first, and are generally used to convert macros into code. I will use a syntax extension to change the entire body of a function from sequential code into parallelised code. Linter plugins run after all the syntax extension plugins, and are generally used to check code style to produce warnings (like unused variable).
+
+The linter plugin will have the abstract syntax tree of the code with all the macros expanded. This stage has all the information required about dependencies. However, once the rust compiler gets to the linter plugins, I can no longer edit the code (without recompiling the compiler). The solution I decided on was to compile the program twice. On the first compile, the syntax extension does nothing and the linter plugin examines the expanded code. The dependency information gathered is saved into a file for the next compile. On the second compile, the syntax extension plugin reads the file to get all the dependency information. Any parallelisable parts are modified to be run in parallel.
+
+The rust plugin system requires an annotation to be able to access that element of the code. Each function of the sequential source code should be annotated with \texttt{\#[autoparallelise]}. The AST is described by three types of structs: Block, Stmt and Expr. A block contains a list of statements, and each statement is a combination of expressions. Macros can take arguments and are transformed into code. This transformation happens in the compiler after executing all the syntax extension plugins. Each function is evaluated separately.
 
 \section{Dependency Analysis}
+The dependency analysis stage is split over two compiles. The first compile uses the linter plugin, and the second uses the syntax extension plugin.
+
+\subsection{Linter Plugin}
 % Analysis Stage
 %==================
 % Convert from Rust AST to our representation of Blocks and Statements
@@ -16,13 +27,28 @@
 % StmtID is the span.lo().0 and span.hi().0 which refers to the byte in the original source code.
 
 % All the EncodedDependencyTree's and function meta data is saved into a JSON file
+The block of the sequential function is examined statement by statement. Each statement is converted into our representation of the AST so that information can be stored about the dependencies. The extra information includes two environments containing which variables the statement requires and produces.
 
+Once all the statements for a function are converted into our representation, the dependency environment need to be matched up to statement ids. Each converted statement is looked at in turn, starting from the beginning of the function. The algorithm looks backwards from the current point in the function to find what statements produce the variables in the requires environment. The statement ID relative to the block of all of the dependencies is stored as part of the converted statement.
+
+It is possible for a block to be inside a block by being represented as a Statement. Blocks need to be evaluated using the same method as explained in the previous paragraph. A block statement is represented as a list of converted statements, as well as the blocks own environment and dependency ids. It is also possible for a new block to be part of another expression (i.e. for loops). In this case, this is stored as an ExprBlock with the statement that the block originates from, a subtree containing a Block statement (there could be more than one block) and the environments/dependency ids.
+
+Once all functions have been analysed, the DependencyTree is converted into an EncodedDependencyTree. The code part of the converted statement is converted into a statement id. The statement ID is represented as a pair of numbers \texttt{(span.lo().0, span.hi().0)}, which relate to the byte location of the source code. This will remain consistent between compile runs, whereas the NodeID does not. All EncodedDependencyTrees and function meta data is stored into a JSON file using \texttt{serde\_json}.
+
+
+\subsection{Syntax Extension Plugin}
 % Modification Stage
 %==================
 % First part of analysis stage is repeated for the modification stage.
 % Modification stage does not have marcos expanded, and so some dependencies would be missed.
 % The EncodedDependencyTree is loaded from the JSON file which should include the dependency of the expanded macros.
 % The EncodedDependencyTree is merged with the DependencyTree from the Modification stage so that unexpanded macros have dependencies.
+
+The plugin detects the JSON file and loads it. This is stored as a shared state between different functions.
+
+The first part of the dependency analysis is repeated for the syntax extension plugin this time. In later section of the design, we need access to the pure AST. There is no (easy) way for the AST to be store into a JSON file and recreated into structs that I could find. The reason that we use the linter plugin is so that we can see the dependencies hidden inside macros.
+
+The dependencies are merged function by function from the shared state so that unexpanded macros get the missing dependencies. The dependencies of Statements that have the same StmtID are merged together.
 
 \section{Scheduler}
 % Takes the DependencyTree of a function with all relative dependencies added.
@@ -39,5 +65,9 @@
 
 % Performance Metric:
 % Currently just a fixed number 1
+
+Once the dependency analysis is complete, the scheduler takes the dependency tree and works out a schedule. All relative dependency ids are converted into StmtIDs. The idea around the scheduling algorithm is Maximum Spanning Trees. All statements that have no dependencies can be started at the very beginning. All remaining statements wait for all their dependencies to be put into the schedule. Once all the dependencies for a statement are added, this statement is selected as the next one to add to the schedule. As each statement requires all of its dependencies before it can be executed, it should be scheduled to run after the slowest dependency. This should minimise the amount of time that the statement has to wait for its dependencies. Synclines are created for all the remaining dependencies so that all dependencies are met. Each block gets its own schedule.
+
 \section{Reconstructor}
+All parts of the reconstructor algorithm takes part in the second compile.
 % Takes the schedule of a function and converts it back into real (parallelised) code

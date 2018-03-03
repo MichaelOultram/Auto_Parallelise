@@ -1,11 +1,20 @@
 \chapter{Introduction}
 
-\todo{Write introduction}
+Processors are being released with more cores. Sequential code cannot take advantage of these new cores. Writing parallel code is more difficult than writing sequential code. Existing sequential code would need to be rewritten to be parallelised. Ideally we want to gain the benefits of parallel code, whilst only having to write easy sequential code.
+
+One solution to this problem is a parallelising compiler. Research done in this field has mostly focused on the C/C++ language although other researches have had success using other languages. Some methods require manual annotation of the source code by the programmer to specify which parts of the program are parallelisable. Others have attempted to automatically detect these areas, but with an unsafe language like C++ it is challenging.
+
+For my project, I focused on the safe language rust. Rust has a unique way of managing memory such that only one thread can access the memory space at once. This is guaranteed at compile time, and should make the process of automatically detecting dependencies much easier. Rust also allows plugins into the compiler (nightly feature only as of writing) which gives modification access to the abstract syntax tree.
+
 
 \section{Rust Language Features}
-Rust is similar to other programming languages such as C++ but it does has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. For more in depth explainations of these features, the reader should look at the language documentation \parencite{rustbook}.
+\label{sec:rust-language-features}
+Rust is similar to other programming languages such as C++ but it does has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. If the reader requires more in depth understanding than what is provided, then they should look at the language documentation \parencite{rustbook}.
 
-\subsection{Ownership of variables}
+\subsection{Safety Features}
+``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. To get these safety properties, rust has some unique features. The biggest difference to other programming languages is how variable are handled.
+
+\subsubsection{Ownership}
 In Rust, all variables have an ownership. Only one block can have access to that variable at a time. This is enforced at compile time.
 
 \begin{code}
@@ -19,7 +28,7 @@ fn main() {
 fn f(a: &u32){} // f borrows a
 fn g(a: u32){} // g takes ownership of a
 \end{minted}
-\caption{Sample code}
+\caption{Borrowing and moving example}
 \end{code}
 
 In this example, \texttt{a} is a local variable in the \texttt{main} method.
@@ -28,7 +37,32 @@ When \texttt{f} is called with parameter \texttt{a}, the function borrows that v
 
 When \texttt{g} is called with parameter \texttt{a}, the variable is moved to \texttt{g}. This is unlike other programming languages as this is not call-by-value. Instead \texttt{g} takes ownership of \texttt{a}. When \texttt{g} is returned, the main method can no longer use \texttt{a}.
 
-\todo{finish and rewrite}
+\subsubsection{Mutability}
+Variables mutability is declared when the variable is declared. In rust, variables are immutable by default, but if specified they are mutable. When a variable is borrowed, it can either be immutably borrowed or mutably borrowed.
 
-\subsection{Mutability}
-Variables in rust are immutable by default.
+\begin{code}
+\begin{minted}{rust}
+fn main() {
+    let a = 10;
+    let mut b = 20;
+    f(&a, &b);
+    g(&mut b);
+}
+fn f(a: &u32, b: &u32){} // f immutably borrows a and b
+fn g(b: &mut u32){} // g mutably borrows b
+\end{minted}
+\caption{Immutable and mutable borrowing}
+\end{code}
+
+In the \texttt{main} method of this example, \texttt{a} is an immutable local variable and \texttt{b} is a mutable local variable. The \texttt{f} function borrows both \texttt{a} and \texttt{b} immutably. Even though \texttt{b} is declared as mutable, it cannot be changed inside \texttt{f}. Once \texttt{f} returns, \texttt{b} becomes mutable again inside the \texttt{main} method. The \texttt{g} function shows how \texttt{b} can be borrowed mutably.
+
+\subsubsection{Unsafe Blocks}
+Sometimes the programmer may want to get around some of rust's safety features. They can use an unsafe block.
+
+\todo{Give example and explain}
+
+\subsection{Threads}
+\subsubsection{Moving}
+\subsubsection{Overhead}
+
+\subsection{Crates}

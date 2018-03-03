@@ -39,16 +39,16 @@
 % Algorithms
 \usepackage{mdframed}
 \usepackage{minted}
-\usemintedstyle{autumn}
+%\usemintedstyle{autumn}
 \setminted{xleftmargin=1cm,breaklines,baselinestretch=1.2,linenos,fontsize=\footnotesize,frame=lines,framesep=2mm,bgcolor=gray!25}
 \renewcommand\theFancyVerbLine{\scriptsize\arabic{FancyVerbLine}}
 % Code environment
 \usepackage{letltxmacro}
-\usepackage[skip=0]{caption}
+\usepackage[skip=0pt]{caption}
 \newenvironment{code}{
 \captionsetup{type=listing}
 }{}
 %\inputcode{filename.rs}{firstline}{endline}{caption}
 \newcommand{\inputcode}[3]{
-    \inputminted[firstline=#2, lastline=#3, label=\detokenize{#1}]{rust}{code/#1}\vspace{-1em}
+    \inputminted[firstline=#2, lastline=#3, label=\detokenize{#1}]{rust}{code/#1}\vspace{-1.3em}
 }
