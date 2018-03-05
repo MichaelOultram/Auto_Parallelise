@@ -85,7 +85,7 @@ impl NoQueueThreadPool {
         loop {
             // Request a new task
             if is_waiting {
-                //println!("[perm_thread_{}] Waiting", thread_id);
+                //eprintln!("[perm_thread_{}] Waiting", thread_id);
                 thread_sender.send(ThreadStatus::Waiting);
             }
 
@@ -94,20 +94,20 @@ impl NoQueueThreadPool {
                 Ok(ThreadMsg::Shutdown) => break,
                 Ok(ThreadMsg::ReserveTask) => {
                     // A perm_thread will never try to shut itself down
-                    //println!("[perm_thread_{}] Reserved", thread_id);
+                    //eprintln!("[perm_thread_{}] Reserved", thread_id);
                     thread_sender.send(ThreadStatus::Reserved);
                     is_waiting = false;
                 },
                 Ok(ThreadMsg::NewTask(task)) => {
-                    //println!("[perm_thread_{}] Running", thread_id);
+                    //eprintln!("[perm_thread_{}] Running", thread_id);
                     thread_sender.send(ThreadStatus::Running);
                     task.run();
                     is_waiting = true;
                 },
-                Err(_) => {}, //println!("perm_thread_worker errored on recv()"),
+                Err(_) => {}, //eprintln!("perm_thread_worker errored on recv()"),
             }
         }
-        //println!("[perm_thread_{}] Exited", thread_id);
+        //eprintln!("[perm_thread_{}] Exited", thread_id);
         thread_sender.send(ThreadStatus::Exited);
     }
 
@@ -206,7 +206,7 @@ impl NoQueueThreadPool {
         for thread in &pool.temp_threads {
             temp_threads.push(thread.status);
         }
-        println!("perm_threads: {:?}\ntemp_threads: {:?}", perm_threads, temp_threads);
+        eprintln!("perm_threads: {:?}\ntemp_threads: {:?}", perm_threads, temp_threads);
     }
 
     pub fn task_block<F, T>(&self, f: F) -> Receiver<T>

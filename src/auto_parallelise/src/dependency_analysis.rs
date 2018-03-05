@@ -1,9 +1,13 @@
-use syntax::ast::{Block, Expr, ExprKind, Stmt, StmtKind, Path, PatKind, Ident};
+use syntax::ast::{Block, Expr, ExprKind, Stmt, StmtKind, Path, PatKind, Ident, PathSegment};
 use syntax::ptr::P;
 use std::ops::Deref;
 use serde::ser::{Serialize, Serializer, SerializeStruct, SerializeSeq};
 use std::{vec, iter};
 use syntax::print::pprust;
+use syntax_pos::Span;
+use syntax_pos::symbol::Symbol;
+use syntax_pos::hygiene::{SyntaxContext, Mark};
+use serialize::{Decodable, Decoder, Encodable, Encoder};
 
 pub type PathName = Vec<Ident>;
 pub type StmtID = (u32, u32);
@@ -24,11 +28,22 @@ impl Environment {
     pub fn into_depstr(&self) -> EncodedEnvironment {
         let mut depstr = vec![];
         for e in &self.0 {
-            let pathstr: Vec<String> = e.into_iter().map(|i| pprust::ident_to_string(*i)).collect();
+            let pathstr: Vec<(String, Vec<u32>)> = e.into_iter().map(|i| {
+                let mut string = "#".to_owned();
+                string.push_str(&*i.name.as_str());
+                //let ctxt_str = format!("{:?}", i.ctxt);
+                let mark_vec = i.ctxt.marks();
+                let mut mark_u32_vec = vec![];
+                for mark in mark_vec {
+                    mark_u32_vec.push(mark.as_u32());
+                }
+                (string, mark_u32_vec)
+            }).collect();
             depstr.push(pathstr);
         }
         depstr.sort_unstable();
         depstr.dedup();
+        eprintln!("into_depstr: {:?} -> {:?}", self.0, depstr);
         depstr
     }
     pub fn append(&mut self, patch: &EncodedEnvironment) {
@@ -38,11 +53,18 @@ impl Environment {
         env.dedup();
         self.0.clear();
         for p in env {
-            let path: PathName = p.into_iter().map(|i| Ident::from_str(&i)).collect();
+            let path: PathName = p.clone().into_iter().map(|(string, marks_u32)| {
+                let mut ident = Ident::with_empty_ctxt(Symbol::gensym(&string[1..]));
+                for mark_u32 in marks_u32 {
+                    let mark = Mark::from_u32(mark_u32);
+                    ident.ctxt = ident.ctxt.apply_mark(mark);
+                }
+                ident
+            }).collect();
+            eprintln!("append: {:?} -> {:?}", p, path);
             self.0.push(path);
         }
-    }
-    pub fn merge(&mut self, patch: Environment) {
+    }    pub fn merge(&mut self, patch: Environment) {
         for p in patch.0 {
             self.0.push(p);
         }
@@ -98,7 +120,7 @@ pub enum EncodedDependencyNode {
     Mac(StmtID, Vec<usize>, EncodedInOutEnvironment)
 }
 pub type EncodedDependencyTree = Vec<EncodedDependencyNode>;
-pub type EncodedEnvironment = Vec<Vec<String>>;
+pub type EncodedEnvironment = Vec<Vec<(String, Vec<u32>)>>;
 pub type EncodedInOutEnvironment = (EncodedEnvironment, EncodedEnvironment);
 
 impl Serialize for DependencyNode {
@@ -337,6 +359,18 @@ fn read_path(path: &Path) -> PathName {
     for segment in &path.segments {
         output.push(segment.identifier);
     }
+
+
+    let mut segments = vec![];
+    for segment_ident in &output {
+        let segment = PathSegment::from_ident(segment_ident.clone(), Span::default());
+        segments.push(segment);
+    }
+    let var_name = Path {
+        span: Span::default(),
+        segments: segments,
+    };
+    eprintln!("read_path: {} -> {:?} -> {}", pprust::path_to_string(path), output, pprust::path_to_string(&var_name));
     output
 }
 
@@ -407,7 +441,7 @@ fn analyse_block_with_env(block: &Block) -> (DependencyTree, InOutEnvironment) {
     let mut outenv = Environment::empty();
 
     // Examine dep_strs to find the statement indicies
-    //println!("depstrtree: {:?}", depstrtree);
+    //eprintln!("depstrtree: {:?}", depstrtree);
     for id in 0..deptree.len() {
         let mut deps: Vec<usize> = vec![];
         let (mut depin, mut depout) = depstrtree[id].clone();
@@ -543,7 +577,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> InOutEnvironment {
         },
 
         StmtKind::Item(ref item) => {
-            println!("ITEM: {:?}", item);
+            eprintln!("ITEM: {:?}", item);
             (Environment::empty(), Environment::empty())
         },
 
@@ -558,7 +592,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> InOutEnvironment {
 fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment {
     let mut dependencies = vec![];
     let mut produces = vec![];
-    //println!("{:?}", expr.node);
+    //eprintln!("{:?}", expr.node);
     let subexprs: Vec<P<Expr>> = {
         match expr.node {
             ExprKind::Box(ref expr1) |

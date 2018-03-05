@@ -1,7 +1,7 @@
-use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::ast::{self, Stmt, StmtKind, Expr, ExprKind, Block, Item, ItemKind, Ident};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
+use syntax_pos::Span;
 use syntax::print::pprust;
 use std::ops::Deref;
 
@@ -28,11 +28,11 @@ impl MultiItemModifier for AutoParallelise {
             // Find function name and the analysed function
             let func_ident = item.ident;
             let func_name = func_ident.name.to_string();
-            println!("\n\n{:?}", func_name); // Function Id
+            eprintln!("\n\n{:?}", func_name); // Function Id
 
             if let ItemKind::Fn(ref _fndecl, ref _unsafety, ref _constness, ref _abi, ref _generics, ref _block) = item.node {
-                println!("{:?}", _fndecl); // Function decl
-                println!("Unsafety: {}", _unsafety);
+                eprintln!("{:?}", _fndecl); // Function decl
+                eprintln!("Unsafety: {}", _unsafety);
 
                 // Find function from analysed stage
                 let mut maybe_analysed_function: Option<&Function> = None;
@@ -46,17 +46,17 @@ impl MultiItemModifier for AutoParallelise {
                     let mut base_deptree = dependency_analysis::analyse_block(&_block);
                     dependency_analysis::merge_dependencies(&mut base_deptree, &analysed_function.encoded_deptree);
 
-                    println!("DEPTREE:");
+                    eprintln!("DEPTREE:");
                     for node in &base_deptree {
                         let node_json = match serde_json::to_string_pretty(&node) {
                             Ok(obj) => obj,
                             Err(why) => panic!("Unable to convert deptree to JSON: {}", why),
                         };
-                        println!("{}", node_json);
+                        eprintln!("{}", node_json);
                     }
 
-                    println!("DOT deptree output:");
-                    println!("{}", dot::deptree_to_dot(&base_deptree));
+                    eprintln!("DOT deptree output:");
+                    eprintln!("{}", dot::deptree_to_dot(&base_deptree));
 
                     // Produce a schedule
                     let schedule = scheduler::create_schedule(&base_deptree);
@@ -64,10 +64,10 @@ impl MultiItemModifier for AutoParallelise {
                         Ok(obj) => obj,
                         Err(why) => panic!("Unable to convert AutoParallelise to JSON: {}", why),
                     };
-                    println!("SCHEDULE:\n{}\n", schedule_json);
+                    eprintln!("SCHEDULE:\n{}\n", schedule_json);
 
-                    println!("DOT schedule output:");
-                    println!("{}", dot::schedule_to_dot(&schedule));
+                    eprintln!("DOT schedule output:");
+                    eprintln!("{}", dot::schedule_to_dot(&schedule));
 
                     // Convert schedule into multi-threadded code
                     let parstmts = reconstructor::spawn_from_schedule(cx, schedule);
@@ -81,7 +81,7 @@ impl MultiItemModifier for AutoParallelise {
                     let (seqident, seqfunction) = reconstructor::create_function(cx, item, &func_name, false, seqblock);
 
                     // Prints the function
-                    println!("converted_function:\n{}\n{}", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
+                    eprintln!("converted_function:\n{}\n{}", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
 
                     output.push(Annotatable::Item(P(parfunction)));
                     output.push(Annotatable::Item(P(seqfunction)));

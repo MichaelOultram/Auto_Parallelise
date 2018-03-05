@@ -1,7 +1,7 @@
 use syntax::ptr::P;
-use syntax::ast::{Stmt, StmtKind, Expr, ExprKind, Block, Ident, Item, ItemKind};
+use syntax::ast::{self, Stmt, StmtKind, Expr, ExprKind, Block, Ident, Item, ItemKind, Path, PathSegment};
 use syntax::ext::base::{ExtCtxt};
-use syntax::print::pprust;
+use syntax_pos::Span;
 use std::ops::Deref;
 
 use dependency_analysis::{Environment, PathName, StmtID};
@@ -19,11 +19,15 @@ pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
 }
 
 pub fn create_path(cx: &mut ExtCtxt, pathname: PathName) -> P<Expr> {
-    let mut str_name = "".to_owned();
-    for segment in pathname {
-        str_name.push_str(&pprust::ident_to_string(segment));
+    let mut segments = vec![];
+    for segment_ident in pathname {
+        let segment = PathSegment::from_ident(segment_ident, Span::default());
+        segments.push(segment);
     }
-    let var_name = Ident::from_str(&str_name);
+    let var_name = Path {
+        span: Span::default(),
+        segments: segments,
+    };
     quote_expr!(cx,$var_name)
 }
 
@@ -31,7 +35,11 @@ pub fn create_function(cx: &mut ExtCtxt, item: &Item, func_name: &str, join_hand
     if let ItemKind::Fn(ref fndecl, ref unsafety, ref constness, ref abi, ref generics, _) = item.node {
         let mut new_fndecl = fndecl.deref().clone();
         if join_handle {
-            // TODO: Change the return type to JoinHandle<ReturnType>
+            let new_ty = match new_fndecl.output {
+                ast::FunctionRetTy::Default(_) => quote_ty!(cx, ::std::thread::JoinHandle<()>),
+                ast::FunctionRetTy::Ty(ty) => quote_ty!(cx, ::std::thread::JoinHandle<$ty>),
+            };
+            new_fndecl.output = ast::FunctionRetTy::Ty(new_ty);
         }
 
         let new_func = ItemKind::Fn(P(new_fndecl), *unsafety, *constness, *abi, generics.clone(), P(body));
@@ -68,7 +76,7 @@ fn envtuple(cx: &mut ExtCtxt, env: Environment) -> P<Expr> {
     } else {
         panic!("was not tup")
     }
-    println!("ENV: {:?}, TUPLE: {:?}", env, tuple);
+    eprintln!("ENV: {:?}, TUPLE: {:?}", env, tuple);
     P(tuple)
 }
 
@@ -84,7 +92,7 @@ fn syncline_env(synclines: &Vec<(StmtID, StmtID, &Environment)>, to_a: u32, to_b
 pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt> {
     // Gather all the synclines and create them as variables
     let synclines = schedule.get_all_synclines();
-    println!("Synclines:\n{:?}\n", synclines);
+    eprintln!("Synclines:\n{:?}\n", synclines);
     let mut stmts = vec![];
     for ((to_a, to_b), (from_a, from_b), _) in synclines.clone() {
         let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
@@ -122,7 +130,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
             let ((lo, hi), mut children) = match sch[i] {
                 ScheduleTree::Block(ref prereqs, ref spanning_tree, _) |
                 ScheduleTree::Node(ref prereqs, ref spanning_tree) => {
-                    println!("{:?} paths: {:?}", spanning_tree.node.get_stmtid(), spanning_tree.node.get_env());
+                    eprintln!("{:?} paths: {:?}", spanning_tree.node.get_stmtid(), spanning_tree.node.get_env());
 
                     // Add prereqs
                     let (from_a, from_b) = spanning_tree.node.get_stmtid();
@@ -197,7 +205,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
 }
 
 fn exprblock_into_statement(exprstmt: Stmt, exprblock: Block, parallel: bool) -> Stmt {
-    println!("Parallel block: {}", parallel); //TODO: Make exprblock run in parallel if parallel
+    eprintln!("Parallel block: {}", parallel); //TODO: Make exprblock run in parallel if parallel
     // Extract expr
     let expr = match exprstmt.node {
         StmtKind::Local(ref local) =>

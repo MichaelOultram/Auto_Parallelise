@@ -6,6 +6,7 @@ extern crate serde_json;
 #[macro_use] extern crate rustc;
 extern crate syntax;
 extern crate syntax_pos;
+extern crate serialize;
 extern crate rustc_plugin;
 
 use rustc_plugin::Registry;
@@ -36,7 +37,7 @@ pub fn plugin_registrar(reg: &mut Registry) {
         CompilerStage::Analysis => 1,
         CompilerStage::Modification => 2,
     };
-    println!("[auto_parallelise] Stage {} of 2 - {:?}", stage, obj.compiler_stage);
+    eprintln!("[auto_parallelise] Stage {} of 2 - {:?}", stage, obj.compiler_stage);
 
     // Second pass uses the syntax extension
     reg.register_syntax_extension(Symbol::intern("autoparallelise"), MultiModifier(Box::new(obj.clone())));

@@ -43,7 +43,7 @@ pub enum ScheduleTree<'a> {
 impl<'a> ScheduleTree<'a>{
     fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode) -> Self {
         if prereqs.len() > 0 {
-            println!("Got a prereq: {:?}, for node {:?}", prereqs, node);
+            eprintln!("Got a prereq: {:?}, for node {:?}", prereqs, node);
         }
         match node {
             &DependencyNode::Expr(_, _, _) |
@@ -133,7 +133,7 @@ impl<'a> SpanningTree<'a> {
 }
 
 pub fn create_schedule(deptree: &DependencyTree) -> Schedule {
-    println!("create_schedule()");
+    eprintln!("create_schedule()");
     // Find all the independent nodes in the current block
     let mut schedule_trees: Vec<ScheduleTree> = vec![];
     let mut dependent_nodes = vec![];
@@ -159,14 +159,14 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
     let mut num_remaining;
     while dependent_nodes.len() > 0 {
         num_remaining = dependent_nodes.len();
-        println!("num_remaining: {}", num_remaining);
+        eprintln!("num_remaining: {}", num_remaining);
 
         // Check for nodes with all their dependencies on the spanning_tree
         // Add the node to the longest dependency
 
         dependent_nodes.retain(|&(ref node, ref deps_stmtids)| {
             let node_envin = node.get_env().0.clone();
-            println!("node_envin: {:?}", node_envin);
+            eprintln!("node_envin: {:?}", node_envin);
 
             // If they have a single dependency
             let mut best_nodes_ids = vec![]; // (TreeID,Weight)
@@ -219,16 +219,16 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                                 if let Some(tree_node) = result {
                                     // Get outenv for tree_node
                                     let &(_, ref treeoutenv) = tree_node.node.get_env();
-                                    println!("tree_node: {:?}", tree_node.node);
-                                    println!("treeoutenv: {:?}", treeoutenv);
+                                    eprintln!("tree_node: {:?}", tree_node.node);
+                                    eprintln!("treeoutenv: {:?}", treeoutenv);
                                     // Remove all the elements that this satisfes
                                     let mut diff_env = treeoutenv.clone();
                                     diff_env.remove_env(node_envin.clone());
-                                    println!("treeoutenv-node_envin: {:?}", diff_env);
+                                    eprintln!("treeoutenv-node_envin: {:?}", diff_env);
                                     // Want to keep removed elements from diff_env
                                     let mut sync_env = treeoutenv.clone();
                                     sync_env.remove_env(diff_env);
-                                    println!("sync_env: {:?}", sync_env);
+                                    eprintln!("sync_env: {:?}", sync_env);
                                     tree_node.add_sync_to(node_stmtid, node.get_stmtid(), sync_env);
                                     prereqs.push(node_stmtid);
                                 } else {
@@ -241,7 +241,7 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                     }
                     assert!(prereqs.len() + 1 == best_nodes_ids.len());
                     if prereqs.len() > 0 {
-                        println!("Had prereqs: {:?}", prereqs);
+                        eprintln!("Had prereqs: {:?}", prereqs);
                     }
 
                     // Add node to best branch
