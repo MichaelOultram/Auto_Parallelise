@@ -374,7 +374,8 @@ fn empty_block(block: &Block) -> P<Block> {
     })
 }
 
-fn read_path(path: &Path) -> PathName {
+fn read_path(path: &Path) -> Option<PathName> {
+    eprintln!("path_global: {}", path.is_global());
     let mut output = vec![];
     for segment in &path.segments {
         output.push(segment.identifier);
@@ -390,8 +391,13 @@ fn read_path(path: &Path) -> PathName {
         span: Span::default(),
         segments: segments,
     };
-    //eprintln!("read_path: {} -> {:?} -> {}", pprust::path_to_string(path), output, pprust::path_to_string(&var_name));
-    output
+    // Ignore paths that are too long
+    if output.len() > 1 {
+        None
+    } else {
+        eprintln!("read_path: {} -> {:?} -> {}", pprust::path_to_string(path), output, pprust::path_to_string(&var_name));
+        Some(output)
+    }
 }
 
 fn remove_blocks(stmt: &Stmt) -> P<Stmt> {
@@ -924,7 +930,10 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
             },
 
             ExprKind::Path(_, ref path) => {
-                dependencies.push(read_path(path));
+                if let Some(pathname) = read_path(path) {
+                    dependencies.push(pathname);
+                }
+
                 // TODO: Check whether path is using move or borrow
                 vec![]
             },
@@ -962,20 +971,26 @@ fn check_pattern(sub_blocks: &mut DependencyTree, patkind: &PatKind) -> Environm
         },
 
         &PatKind::Struct(ref path, ref fieldpats, _) => {
-            env.push(read_path(path));
+            if let Some(pathname) = read_path(path) {
+                env.push(pathname)
+            }
             for fieldpat in fieldpats {
                 env.push(vec![fieldpat.node.ident]);
             }
         },
 
         &PatKind::TupleStruct(ref path, ref pats, _) => {
-            env.push(read_path(path));
+            if let Some(pathname) = read_path(path) {
+                env.push(pathname)
+            }
             for pat in pats {
                 env.merge(check_pattern(sub_blocks, &pat.node));
             }
         },
 
-        &PatKind::Path(_, ref path) => env.push(read_path(path)),
+        &PatKind::Path(_, ref path) => if let Some(pathname) = read_path(path) {
+            env.push(pathname)
+        },
 
         &PatKind::Tuple(ref pats, _) => {
             for pat in pats {
