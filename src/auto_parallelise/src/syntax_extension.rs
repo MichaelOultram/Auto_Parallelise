@@ -81,7 +81,7 @@ impl MultiItemModifier for AutoParallelise {
                     let (seqident, seqfunction) = reconstructor::create_function(cx, item, &func_name, false, seqblock);
 
                     // Prints the function
-                    eprintln!("converted_function:\n{}\n{}", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
+                    println!("{}\n{}\n", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
 
                     output.push(Annotatable::Item(P(parfunction)));
                     output.push(Annotatable::Item(P(seqfunction)));
