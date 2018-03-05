@@ -29,13 +29,13 @@ impl Environment {
         let mut depstr = vec![];
         for e in &self.0 {
             let pathstr: Vec<(String, Vec<u32>)> = e.into_iter().map(|i| {
-                let mut string = "#".to_owned();
+                let mut string = "".to_owned();
                 string.push_str(&*i.name.as_str());
                 //let ctxt_str = format!("{:?}", i.ctxt);
                 let mark_vec = i.ctxt.marks();
                 let mut mark_u32_vec = vec![];
                 for mark in mark_vec {
-                    mark_u32_vec.push(mark.as_u32());
+                    mark_u32_vec.push(mark.modern().as_u32());
                 }
                 (string, mark_u32_vec)
             }).collect();
@@ -43,7 +43,7 @@ impl Environment {
         }
         depstr.sort_unstable();
         depstr.dedup();
-        eprintln!("into_depstr: {:?} -> {:?}", self.0, depstr);
+        //eprintln!("into_depstr: {:?} -> {:?}", self.0, depstr);
         depstr
     }
     pub fn append(&mut self, patch: &EncodedEnvironment) {
@@ -54,14 +54,14 @@ impl Environment {
         self.0.clear();
         for p in env {
             let path: PathName = p.clone().into_iter().map(|(string, marks_u32)| {
-                let mut ident = Ident::with_empty_ctxt(Symbol::gensym(&string[1..]));
+                let mut ident = Ident::with_empty_ctxt(Symbol::gensym(&string[0..]));
                 for mark_u32 in marks_u32 {
                     let mark = Mark::from_u32(mark_u32);
                     ident.ctxt = ident.ctxt.apply_mark(mark);
                 }
                 ident
             }).collect();
-            eprintln!("append: {:?} -> {:?}", p, path);
+            //eprintln!("append: {:?} -> {:?}", p, path);
             self.0.push(path);
         }
     }    pub fn merge(&mut self, patch: Environment) {
@@ -72,11 +72,31 @@ impl Environment {
     }
     pub fn into_iter(self) -> vec::IntoIter<Vec<Ident>> {self.0.into_iter()}
     pub fn push(&mut self, elem: PathName) {self.0.push(elem)}
-    pub fn contains(&self, elem: &PathName) -> bool {self.0.contains(elem)}
-    pub fn len(&self) -> usize {self.0.len()}
-    pub fn remove(&mut self, elems: Vec<PathName>) {
-        self.0.retain(|elem| !elems.contains(&elem));
+    pub fn contains(&self, target_elem: &PathName) -> bool {
+        for elem in &self.0 {
+            if elem.len() == target_elem.len() {
+                let mut is_equal = true;
+                for i in 0..elem.len() {
+                    let elem_section = elem[i].name.as_str();
+                    let target_elem_section = target_elem[i].name.as_str();
+                    if elem_section != target_elem_section {
+                        is_equal = false;
+                        break;
+                    }
+                }
+                if is_equal {
+                    eprintln!("contains: {:?} == {:?}", target_elem, elem);
+                    return true;
+                }
+            }
+        }
+        eprintln!("contains: {:?} != {:?}", target_elem, self.0);
+        false
     }
+    pub fn len(&self) -> usize {self.0.len()}
+    /*pub fn remove(&mut self, elems: Vec<PathName>) {
+        self.0.retain(|elem| !elems.contains(&elem));
+    }*/
     pub fn remove_env(&mut self, elems: Environment) {
         self.0.retain(|elem| !elems.contains(&elem));
     }
@@ -370,7 +390,7 @@ fn read_path(path: &Path) -> PathName {
         span: Span::default(),
         segments: segments,
     };
-    eprintln!("read_path: {} -> {:?} -> {}", pprust::path_to_string(path), output, pprust::path_to_string(&var_name));
+    //eprintln!("read_path: {} -> {:?} -> {}", pprust::path_to_string(path), output, pprust::path_to_string(&var_name));
     output
 }
 
@@ -385,49 +405,205 @@ fn remove_blocks(stmt: &Stmt) -> P<Stmt> {
             _ => return P(output),
         };
 
-        // Check to see if the expression contains a block
-        let node = match expr.node {
-            ExprKind::If(ref a, ref block, ref c) =>
-            ExprKind::If(a.clone(), empty_block(block), c.clone()),
-
-            ExprKind::IfLet(ref a, ref b, ref block, ref c) =>
-            ExprKind::IfLet(a.clone(), b.clone(), empty_block(block), c.clone()),
-
-            ExprKind::While(ref a, ref block, ref c) =>
-            ExprKind::While(a.clone(), empty_block(block), c.clone()),
-
-            ExprKind::WhileLet(ref a, ref b, ref block, ref c) =>
-            ExprKind::WhileLet(a.clone(), b.clone(), empty_block(block), c.clone()),
-
-            ExprKind::ForLoop(ref a, ref b, ref block, ref c) =>
-            ExprKind::ForLoop(a.clone(), b.clone(), empty_block(block), c.clone()),
-
-            ExprKind::Loop(ref block, ref c) =>
-            ExprKind::Loop(empty_block(block), c.clone()),
-
-            ExprKind::Block(ref block) =>
-            ExprKind::Block(empty_block(block)),
-
-            ExprKind::Catch(ref block) =>
-            ExprKind::Catch(empty_block(block)),
-
-            ref x => x.clone(),
-        };
-
-        let expr2 = Expr {
-            id: expr.id,
-            node: node,
-            span: expr.span,
-            attrs: expr.attrs.clone(),
-        };
+        let expr2 =  remove_blocks_expr(expr);
 
         output.node = match stmt.node {
-            StmtKind::Expr(_) => StmtKind::Expr(P(expr2)),
-            StmtKind::Semi(_) => StmtKind::Semi(P(expr2)),
+            StmtKind::Expr(_) => StmtKind::Expr(expr2),
+            StmtKind::Semi(_) => StmtKind::Semi(expr2),
             _ => panic!(),
         };
     }
     P(output)
+}
+
+fn remove_blocks_expr(expr: &Expr) -> P<Expr> {
+    let node = match expr.node {
+        ExprKind::If(ref a, ref block, ref mc) => {
+            let clean_a = remove_blocks_expr(a.deref());
+            let clean_c = if let &Some(ref c) = mc {
+                Some(remove_blocks_expr(c.deref()))
+            } else {
+                None
+            };
+            ExprKind::If(clean_a, empty_block(block), clean_c)
+        },
+
+        ExprKind::IfLet(ref a, ref b, ref block, ref mc) => {
+            let clean_b = remove_blocks_expr(b.deref());
+            let clean_c = if let &Some(ref c) = mc {
+                Some(remove_blocks_expr(c.deref()))
+            } else {
+                None
+            };
+            ExprKind::IfLet(a.clone(), clean_b, empty_block(block), clean_c)
+        },
+
+        ExprKind::While(ref a, ref block, ref c) =>
+        ExprKind::While(remove_blocks_expr(a), empty_block(block), c.clone()),
+
+        ExprKind::WhileLet(ref a, ref b, ref block, ref c) =>
+        ExprKind::WhileLet(a.clone(), remove_blocks_expr(b), empty_block(block), c.clone()),
+
+        ExprKind::ForLoop(ref a, ref b, ref block, ref c) =>
+        ExprKind::ForLoop(a.clone(), b.clone(), empty_block(block), c.clone()),
+
+        ExprKind::Loop(ref block, ref c) =>
+        ExprKind::Loop(empty_block(block), c.clone()),
+
+        ExprKind::Block(ref block) =>
+        ExprKind::Block(empty_block(block)),
+
+        ExprKind::Catch(ref block) =>
+        ExprKind::Catch(empty_block(block)),
+
+        ExprKind::Box(ref a) =>
+        ExprKind::Box(remove_blocks_expr(a)),
+
+        ExprKind::Unary(ref a, ref b) =>
+        ExprKind::Unary(a.clone(), remove_blocks_expr(b)),
+
+        ExprKind::Cast(ref a, ref b) =>
+        ExprKind::Cast(remove_blocks_expr(a), b.clone()),
+
+        ExprKind::Type(ref a, ref b) =>
+        ExprKind::Type(remove_blocks_expr(a), b.clone()),
+
+        ExprKind::Field(ref a, ref b) =>
+        ExprKind::Field(remove_blocks_expr(a), b.clone()),
+
+        ExprKind::TupField(ref a, ref b) =>
+        ExprKind::TupField(remove_blocks_expr(a), b.clone()),
+
+        ExprKind::Paren(ref a) =>
+        ExprKind::Paren(remove_blocks_expr(a)),
+
+        ExprKind::Try(ref a) =>
+        ExprKind::Try(remove_blocks_expr(a)),
+
+        ExprKind::AddrOf(ref a, ref b) =>
+        ExprKind::AddrOf(a.clone(), remove_blocks_expr(b)),
+
+        ExprKind::InPlace(ref a, ref b) =>
+        ExprKind::InPlace(remove_blocks_expr(a), remove_blocks_expr(b)),
+
+        ExprKind::Assign(ref a, ref b) =>
+        ExprKind::Assign(remove_blocks_expr(a), remove_blocks_expr(b)),
+
+        ExprKind::Index(ref a, ref b) =>
+        ExprKind::Index(remove_blocks_expr(a), remove_blocks_expr(b)),
+
+        ExprKind::Repeat(ref a, ref b) =>
+        ExprKind::Repeat(remove_blocks_expr(a), remove_blocks_expr(b)),
+
+        ExprKind::Binary(ref a, ref b, ref c) =>
+        ExprKind::Binary(a.clone(), remove_blocks_expr(b), remove_blocks_expr(c)),
+
+        ExprKind::AssignOp(ref a, ref b, ref c) =>
+        ExprKind::AssignOp(a.clone(), remove_blocks_expr(b), remove_blocks_expr(c)),
+
+        ExprKind::Array(ref a) => {
+            let mut clean_a = vec![];
+            for expr in a {
+                clean_a.push(remove_blocks_expr(expr));
+            }
+            ExprKind::Array(clean_a)
+        },
+
+        ExprKind::Tup(ref a) => {
+            let mut clean_a = vec![];
+            for expr in a {
+                clean_a.push(remove_blocks_expr(expr));
+            }
+            ExprKind::Tup(clean_a)
+        },
+
+
+        ExprKind::MethodCall(ref a, ref b) => {
+            let mut clean_b = vec![];
+            for expr in b {
+                clean_b.push(remove_blocks_expr(expr));
+            }
+            ExprKind::MethodCall(a.clone(), clean_b)
+        },
+        ExprKind::Call(ref a, ref b) => {
+            let mut clean_b = vec![];
+            for expr in b {
+                clean_b.push(remove_blocks_expr(expr));
+            }
+            ExprKind::Call(remove_blocks_expr(a), clean_b)
+        },
+
+        ExprKind::Break(ref a, ref mb) => {
+            let clean_b = if let &Some(ref b) = mb {
+                Some(remove_blocks_expr(b))
+            } else {
+                None
+            };
+            ExprKind::Break(a.clone(), clean_b)
+        }
+
+        ExprKind::Struct(ref a, ref b, ref mc) => {
+            let clean_c = if let &Some(ref c) = mc {
+                Some(remove_blocks_expr(c))
+            } else {
+                None
+            };
+            ExprKind::Struct(a.clone(), b.clone(), clean_c)
+        }
+
+        ExprKind::Ret(ref ma) => {
+            let clean_a = if let &Some(ref a) = ma {
+                Some(remove_blocks_expr(a))
+            } else {
+                None
+            };
+            ExprKind::Ret(clean_a)
+        },
+        ExprKind::Yield(ref ma) => {
+            let clean_a = if let &Some(ref a) = ma {
+                Some(remove_blocks_expr(a))
+            } else {
+                None
+            };
+            ExprKind::Yield(clean_a)
+        },
+
+        ExprKind::Match(ref a, ref b) => {
+            let mut clean_b = vec![];
+            for expr in b {
+                let mut expr2 = expr.clone();
+                expr2.body = remove_blocks_expr(expr.body.deref());
+                clean_b.push(expr2);
+            }
+            ExprKind::Match(remove_blocks_expr(a), clean_b)
+        },
+
+        ExprKind::Closure(ref a, ref b, ref c, ref d, ref e) => ExprKind::Closure(a.clone(), b.clone(), c.clone(), remove_blocks_expr(d), e.clone()),
+
+        ExprKind::Range(ref ma, ref mb, ref c) => {
+            let clean_a = if let &Some(ref a) = ma {
+                Some(remove_blocks_expr(a))
+            } else {
+                None
+            };
+            let clean_b = if let &Some(ref b) = mb {
+                Some(remove_blocks_expr(b))
+            } else {
+                None
+            };
+            ExprKind::Range(clean_a, clean_b, c.clone())
+        },
+
+        ref x => x.clone(),
+    };
+
+    let expr2 = Expr {
+        id: expr.id,
+        node: node,
+        span: expr.span,
+        attrs: expr.attrs.clone(),
+    };
+    P(expr2)
 }
 
 pub fn analyse_block(block: &Block) -> DependencyTree {
@@ -447,7 +623,7 @@ fn analyse_block_with_env(block: &Block) -> (DependencyTree, InOutEnvironment) {
         let (mut depin, mut depout) = depstrtree[id].clone();
 
         // This node consumes some of the outenv, and adds new parts of the outenv
-        outenv.remove(depin.clone().0);
+        outenv.remove_env(depin.clone());
         outenv.merge(depout.clone());
 
         // find the first instance of each variable from this point (-1)
@@ -540,6 +716,7 @@ fn check_stmt(deptree: &mut DependencyTree, stmt: &Stmt) -> InOutEnvironment {
                         inenv.merge(vin.clone());
                         outenv.merge(vout.clone());
                     }
+                    assert!(subtree.len() > 0);
                     deptree.push(DependencyNode::ExprBlock(remove_blocks(&stmt), subtree, vec![], (inenv.clone(), outenv.clone())));
                 }
                 (inenv, outenv)
@@ -605,9 +782,9 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
             ExprKind::Try(ref expr1) => vec![expr1.clone()],
 
             ExprKind::AddrOf(_, ref expr1) => {
-                let mut unneeded = vec![];
-                let (subinenv, _) = check_expr(&mut unneeded, expr1);
-                produces.extend(subinenv.0);
+                //let mut unneeded = vec![];
+                //let (subinenv, _) = check_expr(&mut unneeded, expr1);
+                //produces.extend(subinenv.0);
                 vec![expr1.clone()]
             },
 
@@ -617,9 +794,9 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
             ExprKind::AssignOp(_, ref expr1, ref expr2) |
             ExprKind::Index(ref expr1, ref expr2) |
             ExprKind::Repeat(ref expr1, ref expr2) => {
-                let mut unneeded = vec![];
-                let (subinenv, _) = check_expr(&mut unneeded, expr1);
-                produces.extend(subinenv.0);
+                //let mut unneeded = vec![];
+                //let (subinenv, _) = check_expr(&mut unneeded, expr1);
+                //produces.extend(subinenv.0);
                 vec![expr1.clone(), expr2.clone()]
             },
 
@@ -629,21 +806,21 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
             ExprKind::MethodCall(ref expr1, ref exprl) => {
                 // TODO: expr1 resolves to a method name
                 // Should check whether method is safe/independent?
-                for ref expr in exprl {
+                /*for ref expr in exprl {
                     let mut unneeded = vec![];
                     let (subinenv, _) = check_expr(&mut unneeded, expr);
                     produces.extend(subinenv.0);
-                }
+                }*/
                 exprl.clone()
             },
             ExprKind::Call(ref expr1, ref exprl) => {
                  // TODO: expr1 resolves to a method name
                  // Should check whether method is safe/independent?
-                 for ref expr in exprl {
+                 /*for ref expr in exprl {
                      let mut unneeded = vec![];
                      let (subinenv, _) = check_expr(&mut unneeded, expr);
                      produces.extend(subinenv.0);
-                 }
+                 }*/
                  exprl.clone()
             },
 
@@ -681,7 +858,6 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
                 dependencies.extend(subinenv.0);
                 produces.extend(suboutenv.0);
                 sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], sub_env));
-                // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![expr1.clone()]
             },
 
@@ -693,28 +869,33 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
                 dependencies.extend(subinenv.0);
                 produces.extend(suboutenv.0);
                 sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], sub_env));
-                // TODO: Examine subdeptree for external dependencies and update vec![node_id]
                 vec![]
             },
 
             ExprKind::Match(ref expr1, ref arml) => {
-                let mut exprs = vec![expr1.clone()];
                 for arm in arml.deref() {
-                    let mut guardsubblocks = vec![];
                     let mut bodysubblocks = vec![];
 
                     // Check the arm body
-                    let (mut bodyinenv, bodyoutenv) = check_expr(&mut bodysubblocks, arm.body.deref());
+                    let (mut bodyinenv, mut bodyoutenv) = check_expr(&mut bodysubblocks, arm.body.deref());
+                    let mut patternsenv = Environment::empty();
+                    for pat in &arm.pats {
+                        let patternenv = check_pattern(&mut vec![], &pat.deref().node);
+                        patternsenv.merge(patternenv);
+                    }
+                    bodyinenv.remove_env(patternsenv.clone());
+                    bodyoutenv.remove_env(patternsenv.clone());
+
+                    // Remove pattensenv from sub_blocks
+                    for mut bodyblock in &mut bodysubblocks {
+                        let &mut (ref mut inenv, ref mut outenv) = bodyblock.get_env_mut();
+                        inenv.remove_env(patternsenv.clone());
+                        outenv.remove_env(patternsenv.clone());
+                    }
 
                     // If there is a guard, check it
-                    if let Some(ref guard) = arm.guard {
-                        let (mut guardinenv, guardoutenv) = check_expr(&mut guardsubblocks, guard.deref());
-
-                        dependencies.extend(guardinenv.0.clone());
-                        produces.extend(guardinenv.0); // Naively assume that we release all dependencies
-
-                        // Guard supplies some of bodies dependencies
-                        bodyinenv.remove(guardoutenv.0);
+                    if let Some(ref _guard) = arm.guard {
+                        panic!("guards not supported!");
                     }
 
                     dependencies.extend(bodyinenv.0.clone());
@@ -722,15 +903,9 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
                     produces.extend(bodyoutenv.0); // TODO: Does bodyoutenv make sense (it is probably empty)
 
                     // Push sub_blocks in correct order
-                    sub_blocks.append(&mut guardsubblocks);
                     sub_blocks.append(&mut bodysubblocks);
-
-                    exprs.push(arm.body.clone());
-                    if let Some(ref guard) = arm.guard {
-                        exprs.push(guard.clone());
-                    }
                 }
-                exprs
+                vec![expr1.clone()]
             },
 
             ExprKind::Closure(_, _, _, ref expr1, _) => {
@@ -773,4 +948,73 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
 
     // Return our dependency list to include those statements
     (Environment::new(dependencies), Environment::new(produces))
+}
+
+fn check_pattern(sub_blocks: &mut DependencyTree, patkind: &PatKind) -> Environment {
+    let mut env = Environment::empty();
+    match patkind {
+        &PatKind::Ident(ref _binding, ref spanident, ref mpat) => {
+            let ident = spanident.node;
+            env.push(vec![ident]);
+            if let &Some(ref pat) = mpat {
+                env.merge(check_pattern(sub_blocks, &pat.node));
+            }
+        },
+
+        &PatKind::Struct(ref path, ref fieldpats, _) => {
+            env.push(read_path(path));
+            for fieldpat in fieldpats {
+                env.push(vec![fieldpat.node.ident]);
+            }
+        },
+
+        &PatKind::TupleStruct(ref path, ref pats, _) => {
+            env.push(read_path(path));
+            for pat in pats {
+                env.merge(check_pattern(sub_blocks, &pat.node));
+            }
+        },
+
+        &PatKind::Path(_, ref path) => env.push(read_path(path)),
+
+        &PatKind::Tuple(ref pats, _) => {
+            for pat in pats {
+                env.merge(check_pattern(sub_blocks, &pat.node));
+            }
+        },
+
+        &PatKind::Box(ref pat) |
+        &PatKind::Ref(ref pat, _) => env.merge(check_pattern(sub_blocks, &pat.node)),
+
+        &PatKind::Lit(ref expr) => {
+            let (inenv, outenv) = check_expr(sub_blocks, expr);
+            env.merge(inenv);
+            env.merge(outenv);
+        },
+
+        &PatKind::Range(ref expr1, ref expr2, _) => {
+            let (inenv, outenv) = check_expr(sub_blocks, expr1);
+            env.merge(inenv);
+            env.merge(outenv);
+            let (inenv, outenv) = check_expr(sub_blocks, expr2);
+            env.merge(inenv);
+            env.merge(outenv);
+        },
+
+        &PatKind::Slice(ref pats1, ref mpat, ref pats2) => {
+            for pat in pats1 {
+                env.merge(check_pattern(sub_blocks, &pat.node));
+            }
+            if let &Some(ref pat) = mpat {
+                env.merge(check_pattern(sub_blocks, &pat.node));
+            }
+            for pat in pats2 {
+                env.merge(check_pattern(sub_blocks, &pat.node));
+            }
+        },
+
+        _ => {},
+    }
+
+    env
 }

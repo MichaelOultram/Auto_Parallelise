@@ -9,7 +9,7 @@ fn main() {
     a += 1;
     b += 1;
     for i in 0..a {
-        println!("Hello world");
+        println!("{}", i);
     }
     println!("{} * {}", a, c);
     println!("{} + {}", a, b);
