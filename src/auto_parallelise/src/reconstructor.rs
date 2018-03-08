@@ -1,11 +1,11 @@
 use syntax::ptr::P;
-use syntax::ast::{self, Stmt, StmtKind, Expr, ExprKind, Block, Ident, Item, ItemKind, Path, PathSegment};
+use syntax::ast::{self, Local, Stmt, StmtKind, Expr, ExprKind, Block, Ident, Item, ItemKind, Path, PathSegment};
 use syntax::ext::base::{ExtCtxt};
 use syntax_pos::Span;
 use std::ops::Deref;
 
-use dependency_analysis::{Environment, PathName, StmtID};
-use scheduler::{Schedule, ScheduleTree};
+use dependency_analysis::{self, Environment, PathName, StmtID};
+use scheduler::{self, Schedule, ScheduleTree};
 
 pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
     let block = quote_block!(cx, {});
@@ -34,6 +34,7 @@ pub fn create_path(cx: &mut ExtCtxt, pathname: PathName) -> P<Expr> {
 pub fn create_function(cx: &mut ExtCtxt, item: &Item, func_name: &str, join_handle: bool, body: Block) -> (Ident, Item) {
     if let ItemKind::Fn(ref fndecl, ref unsafety, ref constness, ref abi, ref generics, _) = item.node {
         let mut new_fndecl = fndecl.deref().clone();
+        eprintln!("new_fndecl: {:?}", new_fndecl);
         if join_handle {
             let new_ty = match new_fndecl.output {
                 ast::FunctionRetTy::Default(_) => quote_ty!(cx, ::std::thread::JoinHandle<()>),
@@ -106,9 +107,54 @@ pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt
     stmts
 }
 
-pub fn call_join_seq_fn(seq_fn_name: Ident) -> Stmt {
-    // Creates a function with calls a parallel function and waits for it's output.
-    unimplemented!()
+pub fn create_seq_fn(cx: &mut ExtCtxt, seq_fn_name: &String, parident: &Ident, item: &Item) -> (Ident, Item) {
+    let mut seqcall =  {
+        if let ItemKind::Fn(ref fndecl, _, _, _, _, _) = item.node {
+            let seqcall = quote_stmt!(cx,let output = $parident();).unwrap();
+            if let StmtKind::Local(ref local) = seqcall.node {
+                let expr = local.init.clone().unwrap();
+                if let ExprKind::Call(ref callname, ref exprl) = expr.node {
+                    let mut exprl = exprl.clone();
+                    // Add all variables into exprl
+                    for arg in &fndecl.inputs {
+                        let pat = arg.pat.deref().clone();
+                        let env = dependency_analysis::check_pattern(&mut vec![], &pat.node);
+                        assert!(env.len() == 1);
+                        let patexpr = create_path(cx, env.get(0).unwrap().clone()).clone();
+                        exprl.push(patexpr);
+                    }
+                    // Reconstruct statement
+                    Stmt {
+                        id: seqcall.id.clone(),
+                        span: seqcall.span.clone(),
+                        node: StmtKind::Local(P(Local {
+                            attrs: local.attrs.clone(),
+                            id: local.id.clone(),
+                            pat: local.pat.clone(),
+                            span: local.span.clone(),
+                            ty: local.ty.clone(),
+                            init: Some(P(Expr {
+                                attrs: expr.attrs.clone(),
+                                id: expr.id.clone(),
+                                node: ExprKind::Call(callname.clone(), exprl),
+                                span: expr.span.clone(),
+                            })),
+                        })),
+                    }
+                } else {
+                    panic!("{:?}", expr)
+                }
+            } else {
+                panic!("{:?}", seqcall)
+            }
+        } else {
+            panic!("{:?}", item)
+        }
+    };
+    let seqstmt = quote_stmt!(cx, output.join().unwrap()).unwrap();
+    let seqstmts = vec![seqcall, seqstmt];
+    let seqblock = create_block(cx, seqstmts);
+    create_function(cx, item, seq_fn_name, false, seqblock)
 }
 
 fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, all_synclines: &Vec<(StmtID, StmtID, &Environment)>) -> Vec<Stmt> {

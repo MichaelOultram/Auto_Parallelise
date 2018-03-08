@@ -76,10 +76,7 @@ impl MultiItemModifier for AutoParallelise {
                     let parthreadblock = reconstructor::create_block(cx, vec![parthread]);
                     // Convert function into use new_block
                     let (parident, parfunction) = reconstructor::create_function(cx, item, &format!("{}_parallel", func_name), true, parthreadblock);
-                    let seqstmts = vec![quote_stmt!(cx,$parident().join().unwrap()).unwrap()]; // TODO Pass parameters to $parident
-                    let seqblock = reconstructor::create_block(cx, seqstmts);
-                    let (seqident, seqfunction) = reconstructor::create_function(cx, item, &func_name, false, seqblock);
-
+                    let (seqident, seqfunction) = reconstructor::create_seq_fn(cx, &func_name, &parident, &item);
                     // Prints the function
                     println!("{}\n{}\n", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
 

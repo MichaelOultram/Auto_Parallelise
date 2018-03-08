@@ -25,6 +25,7 @@ impl Environment {
         env
     }
     pub fn empty() -> Self {Environment{0:vec![]}}
+    pub fn get(&self, i: usize) -> Option<&PathName> {self.0.get(i)}
     pub fn into_depstr(&self) -> EncodedEnvironment {
         let mut depstr = vec![];
         for e in &self.0 {
@@ -959,7 +960,7 @@ fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironment 
     (Environment::new(dependencies), Environment::new(produces))
 }
 
-fn check_pattern(sub_blocks: &mut DependencyTree, patkind: &PatKind) -> Environment {
+pub fn check_pattern(sub_blocks: &mut DependencyTree, patkind: &PatKind) -> Environment {
     let mut env = Environment::empty();
     match patkind {
         &PatKind::Ident(ref _binding, ref spanident, ref mpat) => {

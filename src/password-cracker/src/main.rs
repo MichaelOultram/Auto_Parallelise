@@ -26,14 +26,15 @@ fn load_dictionary() -> Vec<String> {
 
 #[autoparallelise]
 fn hash(word: String) -> String {
+    let mut hash_word = word;
     // Hash word using Sha256
     for _ in 0..40 {
         let mut hasher = Sha256::new();
-        hasher.input_str(&word);
-        word = hasher.result_str();
+        hasher.input_str(&hash_word);
+        hash_word = hasher.result_str();
     }
 
-    return word;
+    return hash_word;
 }
 
 #[autoparallelise]
