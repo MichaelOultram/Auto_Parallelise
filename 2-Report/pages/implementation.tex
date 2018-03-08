@@ -3,10 +3,60 @@
 
 Here is some text above
 
+%\begin{code}
+%    % Sample code
+%    \inputcode{autoparallelise/src/syntax_extension.rs}{50}{60}
+%    \caption{}
+%\end{code}
+
 \begin{code}
-\inputcode{syntax_extension.rs}{0}{199}
-\caption{Sample code}
-\label{code:removeme}
+    % FnKind Enum
+    \inputcode{rust/src/libsyntax/visit.rs}{34}{43}
+    \caption{}
+\end{code}
+
+\begin{code}
+    % Block Struct
+    \inputcode{rust/src/libsyntax/ast.rs}{489}{497}
+    \caption{}
+\end{code}
+
+\begin{code}
+    % Stmt Struct
+    \inputcode{rust/src/libsyntax/ast.rs}{781}{785}
+    \caption{}
+\end{code}
+
+\begin{code}
+    % StmtKind enum
+    \inputcode{rust/src/libsyntax/ast.rs}{815}{828}
+    \caption{}
+\end{code}
+
+
+\begin{code}
+\begin{minted}{rust}
+let a; // Local without init
+a = {
+    let b = vec![1,2,3]; // Local with init
+    println!("{:?}", b); // Mac
+    b.len() // Expr
+}; // Semi
+\end{minted}
+\caption{Example showing different StmtKinds}
+\end{code}
+
+
+\begin{code}
+    % ExprKind enum
+    \inputcode{rust/src/libsyntax/ast.rs}{987}{1122}
+    \caption{}
+\end{code}
+
+\begin{code}
+    % SpanData Struct
+    \inputcode{rust/src/libsyntax_pos/lib.rs}{143}{149}
+    \caption{}
 \end{code}
 
 Here is some text below \autoref{code:removeme}

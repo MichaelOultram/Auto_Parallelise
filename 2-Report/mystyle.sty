@@ -40,7 +40,7 @@
 \usepackage{mdframed}
 \usepackage{minted}
 %\usemintedstyle{autumn}
-\setminted{xleftmargin=1cm,breaklines,baselinestretch=1.2,linenos,fontsize=\footnotesize,frame=lines,framesep=2mm,bgcolor=gray!25}
+\setminted{xleftmargin=1cm,breaklines,baselinestretch=1,linenos,fontsize=\scriptsize,frame=lines,framesep=2mm,bgcolor=gray!25}
 \renewcommand\theFancyVerbLine{\scriptsize\arabic{FancyVerbLine}}
 % Code environment
 \usepackage{letltxmacro}
@@ -50,5 +50,5 @@
 }{}
 %\inputcode{filename.rs}{firstline}{endline}{caption}
 \newcommand{\inputcode}[3]{
-    \inputminted[firstline=#2, lastline=#3, label=\detokenize{#1}]{rust}{code/#1}\vspace{-1.3em}
+    \inputminted[firstline=#2, lastline=#3, label=\detokenize{#1}]{rust}{#1}\vspace{-1.3em}
 }

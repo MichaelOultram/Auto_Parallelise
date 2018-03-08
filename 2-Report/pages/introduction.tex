@@ -57,9 +57,7 @@ fn g(b: &mut u32){} // g mutably borrows b
 In the \texttt{main} method of this example, \texttt{a} is an immutable local variable and \texttt{b} is a mutable local variable. The \texttt{f} function borrows both \texttt{a} and \texttt{b} immutably. Even though \texttt{b} is declared as mutable, it cannot be changed inside \texttt{f}. Once \texttt{f} returns, \texttt{b} becomes mutable again inside the \texttt{main} method. The \texttt{g} function shows how \texttt{b} can be borrowed mutably.
 
 \subsubsection{Unsafe Blocks}
-Sometimes the programmer may want to get around some of rust's safety features. They can use an unsafe block.
-
-\todo{Give example and explain}
+The programmer may want can turn off some of rust's safety features by using an unsafe block. The most common use of an unsafe block is to modify a mutable static variable but it also allows de-referencing of a raw pointer and calling unsafe functions (i.e. an external c function).
 
 \subsection{Threads}
 \subsubsection{Moving}
