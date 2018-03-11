@@ -1,4 +1,4 @@
-use dependency_analysis::EncodedDependencyTree;
+use dependency_analysis::StmtID;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AutoParallelise {
@@ -29,3 +29,16 @@ pub struct Function {
 
     pub encoded_deptree: EncodedDependencyTree,
 }
+
+
+// Depencency Tree
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum EncodedDependencyNode {
+    Expr(StmtID, Vec<usize>, EncodedInOutEnvironment), // Statement ID and Dependency indicies
+    Block(StmtID, EncodedDependencyTree, Vec<usize>, EncodedInOutEnvironment),
+    ExprBlock(StmtID, EncodedDependencyTree, Vec<usize>, EncodedInOutEnvironment),
+    Mac(StmtID, Vec<usize>, EncodedInOutEnvironment)
+}
+pub type EncodedDependencyTree = Vec<EncodedDependencyNode>;
+pub type EncodedEnvironment = Vec<Vec<(String, Vec<u32>)>>;
+pub type EncodedInOutEnvironment = (EncodedEnvironment, EncodedEnvironment);

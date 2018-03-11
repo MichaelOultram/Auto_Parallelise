@@ -18,14 +18,22 @@ use std::io::prelude::*;
 use std::path::Path;
 
 mod macros;
+
+// Two plugins and their shared state
 mod linter;
 mod syntax_extension;
+mod shared_state;
+use shared_state::*;
+
+// Stages of parallelisation
+mod deconstructor;
 mod dependency_analysis;
 mod scheduler;
 mod reconstructor;
+
+// For rendering dependency/schedule graphs
 mod dot;
-mod shared_state;
-use shared_state::*;
+
 pub mod noqueue_threadpool;
 
 static SAVE_FILE: &'static str = ".autoparallelise";

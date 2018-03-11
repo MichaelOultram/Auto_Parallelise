@@ -8,7 +8,6 @@ use serde_json;
 use AutoParallelise;
 use CompilerStage;
 use dependency_analysis;
-use dot;
 use shared_state::{Function};
 
 impl LintPass for AutoParallelise {
@@ -23,6 +22,7 @@ impl EarlyLintPass for AutoParallelise {
         if !self.enabled || self.compiler_stage != CompilerStage::Analysis {
             self.save();
             if self.compiler_stage != CompilerStage::Analysis {
+                // Sometimes compile works, sometimes not. Instead always fail, and use script to copy to a new crate without auto_parallelise
                 ::std::process::exit(1);
             }
             return;
@@ -31,7 +31,6 @@ impl EarlyLintPass for AutoParallelise {
         match _fnkind {
             // fn foo()
             FnKind::ItemFn(_ident, _unsafety, _spanned, _abi, _visibility, _block) => {
-                //eprintln!("\n[auto_parallelise] check_fn(context, ItemFn: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid);
                 eprintln!("\n\n{:?}", _fndecl);
                 let ident_name: String = _ident.name.to_string();
                 let ident_ctxt: String = format!("{:?}", _ident.ctxt);
@@ -72,11 +71,10 @@ impl EarlyLintPass for AutoParallelise {
 
             // fn foo(&self), i.e. obj.foo();
             FnKind::Method(_ident, _method_sig, _visibility, _block) => unimplemented!(),
-            //eprintln!("\n[auto_parallelise] check_fn(context, Method: {:?}, {:?}, {:?}, {})", _block, _fndecl, _span, _nodeid),
+
 
             // |x, y| body
             FnKind::Closure(_body) => unimplemented!(),
-            //eprintln!("\n[auto_parallelise] check_fn(context, Closure: {:?}, {:?}, {:?}, {})", _body, _fndecl, _span, _nodeid),
         }
         self.save();
     }

@@ -1,18 +1,17 @@
 use syntax::ptr::P;
-use syntax::ast::{self, Stmt, StmtKind, Expr, ExprKind, Block, Item, ItemKind, Ident};
+use syntax::ast::{self, ItemKind};
 use syntax::ext::base::{MultiItemModifier, ExtCtxt, Annotatable};
 use syntax_pos::Span;
 use syntax::print::pprust;
-use std::ops::Deref;
 
 use serde_json;
 
 use AutoParallelise;
 use CompilerStage;
 use dot;
-use dependency_analysis::{self, DependencyNode, Environment};
+use dependency_analysis;
 use shared_state::Function;
-use scheduler::{self, ScheduleTree};
+use scheduler;
 
 use reconstructor;
 
@@ -78,7 +77,7 @@ impl MultiItemModifier for AutoParallelise {
                     let (parident, parfunction) = reconstructor::create_function(cx, item, &format!("{}_parallel", func_name), true, parthreadblock);
                     let (seqident, seqfunction) = reconstructor::create_seq_fn(cx, &func_name, &parident, &item);
                     // Prints the function
-                    //println!("{}\n{}\n", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
+                    println!("{}\n{}\n", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
 
                     output.push(Annotatable::Item(P(parfunction)));
                     output.push(Annotatable::Item(P(seqfunction)));

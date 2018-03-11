@@ -4,8 +4,9 @@ use syntax::ext::base::{ExtCtxt};
 use syntax_pos::Span;
 use std::ops::Deref;
 
-use dependency_analysis::{self, Environment, PathName, StmtID};
-use scheduler::{self, Schedule, ScheduleTree};
+use deconstructor;
+use dependency_analysis::{Environment, PathName, StmtID};
+use scheduler::{Schedule, ScheduleTree};
 
 pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
     let block = quote_block!(cx, {});
@@ -118,7 +119,7 @@ pub fn create_seq_fn(cx: &mut ExtCtxt, seq_fn_name: &String, parident: &Ident, i
                     // Add all variables into exprl
                     for arg in &fndecl.inputs {
                         let pat = arg.pat.deref().clone();
-                        let env = dependency_analysis::check_pattern(&mut vec![], &pat.node);
+                        let env = deconstructor::check_pattern(&mut vec![], &pat.node);
                         assert!(env.len() == 1);
                         let patexpr = create_path(cx, env.get(0).unwrap().clone()).clone();
                         exprl.push(patexpr);
@@ -270,7 +271,8 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblock: Block, parallel: bool) ->
     // Create new exprnode with exprblock
     let new_exprnode = match expr.node {
         ExprKind::If(ref a, ref empty_block, ref c) => {
-            assert!(stmtID!(empty_block) == stmtID!(exprblock));
+            //eprintln!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock));
+            // TODO: assert!(stmtID!(empty_block) == stmtID!(exprblock));
             ExprKind::If(a.clone(), P(exprblock), c.clone())
         },
         ExprKind::IfLet(ref a, ref b, _, ref c) => ExprKind::IfLet(a.clone(), b.clone(), P(exprblock), c.clone()),

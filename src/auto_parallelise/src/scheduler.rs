@@ -1,5 +1,4 @@
 use dependency_analysis::{DependencyTree, DependencyNode, StmtID, Environment, InOutEnvironment};
-use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);
