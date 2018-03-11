@@ -1,5 +1,5 @@
 #![feature(plugin)]
-#![plugin(auto_parallelise)]
+#![plugin(auto_parallelise(1))]
 
 extern crate crypto;
 use self::crypto::digest::Digest;
@@ -42,15 +42,17 @@ fn crack_password(dictionary: Vec<String>, password_hash: String) -> Option<Stri
     let mut hashes = vec![];
     for id in 0..dictionary.len() {
         let word = dictionary[id];
-        let word_hash = hash(word);
-        hashes.push(word_hash);
+        hashes.push((word, None));
+    }
+    for (word, mut mhash_word) in hashes {
+        mhash_word = Some(hash(word));
     }
 
-    for id in 0..dictionary.len() {
-        let word_hash = hashes[id];
-        if word_hash == password_hash {
-            let word = dictionary[id];
-            return Some(word);
+    for (word, mhash_word) in hashes {
+        if let Some(hash_word) = mhash_word {
+            if hash_word == password_hash {
+                return Some(word);
+            }
         }
     }
     return None;
@@ -66,7 +68,9 @@ fn main() {
 
     crack_password(dictionary, password_hash);
 
-    println!("Done");
+    for i in 0..4 {
+        println!("Done");
+    }
     let elapsed = now.elapsed();
     let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
     println!("Seconds: {}", sec);

@@ -1,5 +1,5 @@
 #![feature(plugin)]
-#![plugin(auto_parallelise)]
+#![plugin(auto_parallelise())]
 
 #[autoparallelise]
 fn main() {

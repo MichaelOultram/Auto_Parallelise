@@ -20,7 +20,7 @@ impl LintPass for AutoParallelise {
 impl EarlyLintPass for AutoParallelise {
     fn check_fn(&mut self, _context: &EarlyContext, _fnkind: visit::FnKind, _fndecl: &ast::FnDecl, _span: Span, _nodeid: ast::NodeId) {
         // Only need to analyse function during the analysis stage
-        if self.compiler_stage != CompilerStage::Analysis {
+        if !self.enabled || self.compiler_stage != CompilerStage::Analysis {
             self.save();
             return;
         }

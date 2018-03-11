@@ -5,6 +5,7 @@ pub struct AutoParallelise {
     pub compiler_stage: CompilerStage,
     pub linter_level: u32, // Used to determine when linter has finished
     pub functions: Vec<Function>,
+    pub enabled: bool,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]

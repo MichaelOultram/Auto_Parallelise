@@ -19,7 +19,7 @@ use reconstructor;
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, cx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
         // Only make changes when on the Modification stage
-        if self.compiler_stage != CompilerStage::Modification {
+        if !self.enabled || self.compiler_stage != CompilerStage::Modification {
             return vec![_item];
         }
         let mut output = vec![];

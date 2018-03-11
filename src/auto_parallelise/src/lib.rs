@@ -32,13 +32,17 @@ static SAVE_FILE: &'static str = ".autoparallelise";
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
     // Try to load AutoParallelise
-    let obj = AutoParallelise::load();
+    let mut obj = AutoParallelise::load();
     let stage = match obj.compiler_stage {
         CompilerStage::Analysis => 1,
         CompilerStage::Modification => 2,
     };
-    eprintln!("[auto_parallelise] Stage {} of 2 - {:?}", stage, obj.compiler_stage);
 
+    obj.enabled = reg.args().len() == 0;
+    eprintln!("[auto_parallelise] Stage {} of 2 - {:?}", stage, obj.compiler_stage);
+    if !obj.enabled {
+        eprintln!("[auto_parallelise] Plugin Disabled")
+    }
     // Second pass uses the syntax extension
     reg.register_syntax_extension(Symbol::intern("autoparallelise"), MultiModifier(Box::new(obj.clone())));
 
@@ -52,6 +56,7 @@ impl AutoParallelise {
             compiler_stage: CompilerStage::Analysis,
             linter_level: 0,
             functions: vec![],
+            enabled: true,
         }
     }
 
