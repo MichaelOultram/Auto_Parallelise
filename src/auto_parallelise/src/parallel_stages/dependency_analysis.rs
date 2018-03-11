@@ -7,8 +7,8 @@ use syntax::print::pprust;
 use syntax_pos::symbol::Symbol;
 use syntax_pos::hygiene::Mark;
 
-use deconstructor;
-use shared_state::{EncodedDependencyNode, EncodedDependencyTree, EncodedEnvironment};
+use parallel_stages::deconstructor;
+use plugin::shared_state::{EncodedDependencyNode, EncodedDependencyTree, EncodedEnvironment};
 
 pub type PathName = Vec<Ident>;
 pub type StmtID = (u32, u32);

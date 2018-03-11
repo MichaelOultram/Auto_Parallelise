@@ -1,4 +1,4 @@
-use dependency_analysis::StmtID;
+use parallel_stages::dependency_analysis::StmtID;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AutoParallelise {

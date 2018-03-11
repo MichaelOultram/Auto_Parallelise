@@ -5,7 +5,7 @@ use std::vec;
 use syntax::print::pprust;
 use syntax_pos::Span;
 
-use dependency_analysis::{analyse_block_with_env, DependencyNode, DependencyTree, Environment, InOutEnvironment, PathName};
+use parallel_stages::dependency_analysis::{analyse_block_with_env, DependencyNode, DependencyTree, Environment, InOutEnvironment, PathName};
 
 fn empty_block(block: &Block) -> P<Block> {
     P(Block {

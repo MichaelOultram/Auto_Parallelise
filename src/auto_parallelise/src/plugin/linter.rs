@@ -7,8 +7,8 @@ use serde_json;
 
 use AutoParallelise;
 use CompilerStage;
-use dependency_analysis;
-use shared_state::{Function};
+use parallel_stages::dependency_analysis;
+use plugin::shared_state::{Function};
 
 impl LintPass for AutoParallelise {
     fn get_lints(&self) -> LintArray {

@@ -4,9 +4,9 @@ use syntax::ext::base::{ExtCtxt};
 use syntax_pos::Span;
 use std::ops::Deref;
 
-use deconstructor;
-use dependency_analysis::{Environment, PathName, StmtID};
-use scheduler::{Schedule, ScheduleTree};
+use parallel_stages::{dependency_analysis, scheduler, deconstructor};
+use self::dependency_analysis::{Environment, PathName, StmtID};
+use self::scheduler::{Schedule, ScheduleTree};
 
 pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>) -> Block {
     let block = quote_block!(cx, {});

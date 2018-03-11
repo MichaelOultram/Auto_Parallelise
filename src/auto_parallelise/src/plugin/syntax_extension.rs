@@ -8,12 +8,11 @@ use serde_json;
 
 use AutoParallelise;
 use CompilerStage;
-use dot;
-use dependency_analysis;
-use shared_state::Function;
-use scheduler;
 
-use reconstructor;
+use parallel_stages::{dependency_analysis, reconstructor, scheduler};
+use rendering::dot;
+use plugin::shared_state::Function;
+
 
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, cx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {

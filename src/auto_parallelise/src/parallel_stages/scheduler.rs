@@ -1,4 +1,4 @@
-use dependency_analysis::{DependencyTree, DependencyNode, StmtID, Environment, InOutEnvironment};
+use parallel_stages::dependency_analysis::{DependencyTree, DependencyNode, StmtID, Environment, InOutEnvironment};
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);

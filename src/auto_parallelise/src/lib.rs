@@ -17,24 +17,13 @@ use std::fs::{self, File};
 use std::io::prelude::*;
 use std::path::Path;
 
-mod macros;
+#[macro_use] mod utils;
+mod parallel_stages;
+mod plugin;
+mod rendering;
 
-// Two plugins and their shared state
-mod linter;
-mod syntax_extension;
-mod shared_state;
-use shared_state::*;
 
-// Stages of parallelisation
-mod deconstructor;
-mod dependency_analysis;
-mod scheduler;
-mod reconstructor;
-
-// For rendering dependency/schedule graphs
-mod dot;
-
-pub mod noqueue_threadpool;
+use plugin::shared_state::*;
 
 static SAVE_FILE: &'static str = ".autoparallelise";
 

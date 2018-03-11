@@ -1,6 +1,8 @@
-use dependency_analysis::{DependencyTree, DependencyNode};
-use scheduler::{Schedule, ScheduleTree};
 use syntax::print::pprust;
+
+use parallel_stages::{dependency_analysis, scheduler};
+use self::dependency_analysis::{DependencyTree, DependencyNode};
+use self::scheduler::{Schedule, ScheduleTree};
 
 pub fn deptree_to_dot(deptree: &DependencyTree) -> String {
     let mut output = "".to_owned();
