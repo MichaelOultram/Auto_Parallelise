@@ -22,6 +22,9 @@ impl EarlyLintPass for AutoParallelise {
         // Only need to analyse function during the analysis stage
         if !self.enabled || self.compiler_stage != CompilerStage::Analysis {
             self.save();
+            if self.compiler_stage != CompilerStage::Analysis {
+                ::std::process::exit(1);
+            }
             return;
         }
 

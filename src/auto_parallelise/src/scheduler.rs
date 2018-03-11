@@ -83,6 +83,9 @@ impl<'a> ScheduleTree<'a>{
                 for child in &tree.children {
                     synclines.append(&mut child.get_all_synclines())
                 }
+                if let &ScheduleTree::Block(_, _, ref schtree) = self {
+                    synclines.append(&mut schtree.get_all_synclines());
+                }
             },
             &ScheduleTree::SyncTo(from, to, ref env) => synclines.push((from, to, env)),
         }

@@ -17,6 +17,7 @@ use std::fs::{self, File};
 use std::io::prelude::*;
 use std::path::Path;
 
+mod macros;
 mod linter;
 mod syntax_extension;
 mod dependency_analysis;

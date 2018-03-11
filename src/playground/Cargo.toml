@@ -5,4 +5,5 @@ authors = ["Michael Oultram <michael@oultr.am>"]
 
 [dependencies]
 rust-crypto = "0.2.36"
+num_cpus = "*"
 time = "*"

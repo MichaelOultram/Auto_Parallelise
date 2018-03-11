@@ -24,6 +24,10 @@ fn main() {
 fn fibinacci(n: u32) -> u128 {
     match n {
         0 | 1 => 1,
-        _ => fibinacci(n - 1) + fibinacci(n - 2),
+        _ => {
+            let a = fibinacci(n - 1);
+            let b = fibinacci(n - 2);
+            a + b
+        },
     }
 }

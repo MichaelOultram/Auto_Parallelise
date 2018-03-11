@@ -87,7 +87,7 @@ fn syncline_env(synclines: &Vec<(StmtID, StmtID, &Environment)>, to_a: u32, to_b
             return env.clone();
         }
     }
-    panic!("Cannot find syncline and so cannot return environment")
+    panic!("Cannot find syncline ({}_{}_{}_{}) and so cannot return environment", to_a, to_b, from_a, from_b)
 }
 
 pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt> {
@@ -269,7 +269,10 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblock: Block, parallel: bool) ->
 
     // Create new exprnode with exprblock
     let new_exprnode = match expr.node {
-        ExprKind::If(ref a, _, ref c) => ExprKind::If(a.clone(), P(exprblock), c.clone()),
+        ExprKind::If(ref a, ref empty_block, ref c) => {
+            assert!(stmtID!(empty_block) == stmtID!(exprblock));
+            ExprKind::If(a.clone(), P(exprblock), c.clone())
+        },
         ExprKind::IfLet(ref a, ref b, _, ref c) => ExprKind::IfLet(a.clone(), b.clone(), P(exprblock), c.clone()),
         ExprKind::While(ref a, _, ref b) => ExprKind::While(a.clone(), P(exprblock), b.clone()) ,
         ExprKind::WhileLet(ref a, ref b, _, ref c) => ExprKind::WhileLet(a.clone(), b.clone(), P(exprblock), c.clone()),
@@ -277,7 +280,7 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblock: Block, parallel: bool) ->
         ExprKind::Loop(_, ref a) => ExprKind::Loop(P(exprblock), a.clone()),
         ExprKind::Block(_) => ExprKind::Block(P(exprblock)),
         ExprKind::Catch(_) => ExprKind::Catch(P(exprblock)),
-        _ => panic!("Unexpected ExprKind"),
+        _ => panic!("Unexpected ExprKind: {:?}", expr.node),
     };
 
     // Create new expr

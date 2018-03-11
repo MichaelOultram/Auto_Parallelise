@@ -11,9 +11,6 @@ use serialize::{Decodable, Decoder, Encodable, Encoder};
 
 pub type PathName = Vec<Ident>;
 pub type StmtID = (u32, u32);
-macro_rules! stmtID {
-    ($i:ident) => {{($i.span.lo().0, $i.span.hi().0)}}
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment(Vec<PathName>);
