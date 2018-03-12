@@ -1,3 +1,9 @@
+use serde_json;
+
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
+
 use parallel_stages::dependency_analysis::StmtID;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -5,7 +11,7 @@ pub struct AutoParallelise {
     pub compiler_stage: CompilerStage,
     pub linter_level: u32, // Used to determine when linter has finished
     pub functions: Vec<Function>,
-    pub enabled: bool,
+    pub config: Config,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
@@ -42,3 +48,34 @@ pub enum EncodedDependencyNode {
 pub type EncodedDependencyTree = Vec<EncodedDependencyNode>;
 pub type EncodedEnvironment = Vec<Vec<(String, Vec<u32>)>>;
 pub type EncodedInOutEnvironment = (EncodedEnvironment, EncodedEnvironment);
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Config {
+    pub enabled: bool,
+}
+impl Config {
+    pub fn default() -> Self {
+        Config {
+            enabled: true,
+        }
+    }
+
+    pub fn save(&self, path: &Path) {
+        // Try to convert the object to json
+        let obj_json = match serde_json::to_string_pretty(&self) {
+            Ok(obj) => obj,
+            Err(why) => panic!("Unable to convert Config to JSON: {}", why),
+        };
+
+        // Open the file in write-only mode
+        let mut file = match File::create(path) {
+            Err(why) => panic!("Failed to open {}: {}", path.display(), why),
+            Ok(file) => file,
+        };
+
+        // Write obj_json into the file
+        if let Err(why) = file.write_all(obj_json.as_bytes()) {
+            panic!("Failed to write {}: {}", path.display(), why);
+        }
+    }
+}

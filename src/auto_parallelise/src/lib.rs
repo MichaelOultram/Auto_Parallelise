@@ -21,11 +21,12 @@ use std::path::Path;
 mod parallel_stages;
 mod plugin;
 mod rendering;
-
+mod tests;
 
 use plugin::shared_state::*;
 
 static SAVE_FILE: &'static str = ".autoparallelise";
+static CONFIG_FILE: &'static str = "autoparallelise.config";
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
@@ -36,9 +37,11 @@ pub fn plugin_registrar(reg: &mut Registry) {
         CompilerStage::Modification => 2,
     };
 
-    obj.enabled = reg.args().len() == 0;
+    if obj.config.enabled {
+        obj.config.enabled = reg.args().len() == 0;
+    }
     eprintln!("[auto_parallelise] Stage {} of 2 - {:?}", stage, obj.compiler_stage);
-    if !obj.enabled {
+    if !obj.config.enabled {
         eprintln!("[auto_parallelise] Plugin Disabled")
     }
     // Second pass uses the syntax extension
@@ -48,52 +51,68 @@ pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_early_lint_pass(Box::new(obj));
 }
 
+fn read_file(filename: &str) -> Option<String> {
+    // Attempt to open .auto-parallise file
+    let path = Path::new(filename);
+    let maybe_file = File::open(&path);
+
+    // If the file cannot be open, this is a new run
+    if let Err(_) = maybe_file {
+        return None;
+    }
+    let mut file = maybe_file.unwrap();
+
+    // Read the file contents into a string
+    let mut s = String::new();
+    if let Err(why) = file.read_to_string(&mut s) {
+        //panic!("Failed to open {}: {}", path.display(), why)
+        return None;
+    }
+    return Some(s);
+}
+
 impl AutoParallelise {
     fn new() -> Self {
         AutoParallelise {
             compiler_stage: CompilerStage::Analysis,
             linter_level: 0,
             functions: vec![],
-            enabled: true,
+            config: Config::default(),
         }
     }
 
     pub fn load() -> Self {
-        // Attempt to open .auto-parallise file
-        let path = Path::new(SAVE_FILE);
-        let maybe_file = File::open(&path);
+        let mconfig = read_file(CONFIG_FILE);
+        let mobj = read_file(SAVE_FILE);
 
-        // If the file cannot be open, this is a new run
-        if let Err(_) = maybe_file {
-            return AutoParallelise::new()
-        }
-        let mut file = maybe_file.unwrap();
-
-        // Read the file contents into a string
-        let mut s = String::new();
-        if let Err(why) = file.read_to_string(&mut s) {
-            panic!("Failed to open {}: {}", path.display(), why)
-        }
-
-        // Try to convert it the string to an AutoParallelise object
-        let mut obj : AutoParallelise = match serde_json::from_str(&s) {
-            Ok(obj) => obj,
-            Err(why) => panic!("Failed to read {}: {}", path.display(), why),
+        // Extract config if it exists otherwise use default
+        let config = match mconfig {
+            Some(ref json) => match serde_json::from_str(json) {
+                Ok(config) => config,
+                Err(why) => panic!("Unable to parse {} as json: {}", CONFIG_FILE, why),
+            },
+            None => Config::default(),
         };
 
-        obj.linter_level = 0;
+        // Try to convert it the string to an AutoParallelise object
+        let mut obj : AutoParallelise = match mobj {
+            Some(ref json) => match serde_json::from_str(json) {
+                Ok(obj) => obj,
+                Err(why) => panic!("Unable to parse {} as json: {}", SAVE_FILE, why),
+            },
+            None => AutoParallelise::new(),
+        };
 
-        if obj.compiler_stage == CompilerStage::Analysis {
-            // Last stage was Analysis, this stage should parallelise
-            obj.compiler_stage = CompilerStage::Modification;
-            obj
-        } else {
-            // Last stage was Modification, so we need to start from scratch
-            AutoParallelise::new()
-        }
+        obj.config = config;
+        obj.linter_level = 0;
+        obj
     }
 
-    pub fn save(&self) {
+    pub fn save(&mut self) {
+        // Save it so that modification happens next
+        let stage = self.compiler_stage;
+        self.compiler_stage = CompilerStage::Modification;
+
         let path = Path::new(SAVE_FILE);
 
         // Try to convert the object to json
@@ -112,6 +131,7 @@ impl AutoParallelise {
         if let Err(why) = file.write_all(obj_json.as_bytes()) {
             panic!("Failed to write {}: {}", path.display(), why);
         }
+        self.compiler_stage = stage;
     }
 
     pub fn delete(&self) {

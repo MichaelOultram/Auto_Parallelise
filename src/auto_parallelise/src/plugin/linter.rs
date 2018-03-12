@@ -19,12 +19,8 @@ impl LintPass for AutoParallelise {
 impl EarlyLintPass for AutoParallelise {
     fn check_fn(&mut self, _context: &EarlyContext, _fnkind: visit::FnKind, _fndecl: &ast::FnDecl, _span: Span, _nodeid: ast::NodeId) {
         // Only need to analyse function during the analysis stage
-        if !self.enabled || self.compiler_stage != CompilerStage::Analysis {
+        if !self.config.enabled || self.compiler_stage != CompilerStage::Analysis {
             self.save();
-            if self.compiler_stage != CompilerStage::Analysis {
-                // Sometimes compile works, sometimes not. Instead always fail, and use script to copy to a new crate without auto_parallelise
-                ::std::process::exit(1);
-            }
             return;
         }
 
@@ -94,9 +90,13 @@ impl EarlyLintPass for AutoParallelise {
                     ::std::process::exit(1);
                 },
                 CompilerStage::Modification => {
-                    eprintln!("[auto_parallelise] parallelised compilation complete");
+                    eprintln!("[auto_parallelise] Parallelised Compilation Complete");
                     self.delete();
-                    //::std::process::exit(1); // TODO: REMOVE
+                    // Sometimes compile works, sometimes not. Instead always fail, and use script to copy to a new crate without auto_parallelise
+                    // TODO: Remove when nightly compiler bug affecting macros is fixed
+                    if self.config.enabled {
+                        ::std::process::exit(1);
+                    }
                 },
             }
         }
