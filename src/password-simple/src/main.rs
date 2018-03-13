@@ -22,7 +22,7 @@ fn hash(word: String) -> String {
 
 #[autoparallelise]
 fn main() {
-    let now = Instant::now();
+    //let now = Instant::now();
     println!("Start");
 
     let password_hash = format!("108c25e139b930c86c3712e96cb199db970592443f82e239ea6705ab5018ad5b");
@@ -41,7 +41,7 @@ fn main() {
     }
 
     println!("Done");
-    let elapsed = now.elapsed();
-    let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-    println!("Seconds: {}", sec);
+    //let elapsed = now.elapsed();
+    //let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
+    //println!("Seconds: {}", sec);
 }

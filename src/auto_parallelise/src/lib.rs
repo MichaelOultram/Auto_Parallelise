@@ -51,26 +51,6 @@ pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_early_lint_pass(Box::new(obj));
 }
 
-fn read_file(filename: &str) -> Option<String> {
-    // Attempt to open .auto-parallise file
-    let path = Path::new(filename);
-    let maybe_file = File::open(&path);
-
-    // If the file cannot be open, this is a new run
-    if let Err(_) = maybe_file {
-        return None;
-    }
-    let mut file = maybe_file.unwrap();
-
-    // Read the file contents into a string
-    let mut s = String::new();
-    if let Err(why) = file.read_to_string(&mut s) {
-        //panic!("Failed to open {}: {}", path.display(), why)
-        return None;
-    }
-    return Some(s);
-}
-
 impl AutoParallelise {
     fn new() -> Self {
         AutoParallelise {
@@ -82,8 +62,8 @@ impl AutoParallelise {
     }
 
     pub fn load() -> Self {
-        let mconfig = read_file(CONFIG_FILE);
-        let mobj = read_file(SAVE_FILE);
+        let mconfig = utils::read_file(CONFIG_FILE);
+        let mobj = utils::read_file(SAVE_FILE);
 
         // Extract config if it exists otherwise use default
         let config = match mconfig {
@@ -121,16 +101,9 @@ impl AutoParallelise {
             Err(why) => panic!("Unable to convert AutoParallelise to JSON: {}", why),
         };
 
-        // Open the file in write-only mode
-        let mut file = match File::create(&path) {
-            Err(why) => panic!("Failed to open {}: {}", path.display(), why),
-            Ok(file) => file,
-        };
+        utils::write_file(&path, &obj_json);
 
-        // Write obj_json into the file
-        if let Err(why) = file.write_all(obj_json.as_bytes()) {
-            panic!("Failed to write {}: {}", path.display(), why);
-        }
+        // Restore original stage
         self.compiler_stage = stage;
     }
 

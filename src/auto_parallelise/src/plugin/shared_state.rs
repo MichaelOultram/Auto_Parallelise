@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
+use utils;
 use parallel_stages::dependency_analysis::StmtID;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -67,15 +68,6 @@ impl Config {
             Err(why) => panic!("Unable to convert Config to JSON: {}", why),
         };
 
-        // Open the file in write-only mode
-        let mut file = match File::create(path) {
-            Err(why) => panic!("Failed to open {}: {}", path.display(), why),
-            Ok(file) => file,
-        };
-
-        // Write obj_json into the file
-        if let Err(why) = file.write_all(obj_json.as_bytes()) {
-            panic!("Failed to write {}: {}", path.display(), why);
-        }
+        utils::write_file(path, &obj_json);
     }
 }

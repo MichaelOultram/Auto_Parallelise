@@ -10,13 +10,13 @@ use std::time::Instant;
 
 #[autoparallelise]
 fn main() {
-    let now = Instant::now();
-    let fibs = fibinacci(40);
+    //let now = Instant::now();
+    let fibs = fibinacci(10);
     println!("{:?}", fibs);
 
-    let elapsed = now.elapsed();
-    let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-    println!("Seconds: {}", sec);
+    //let elapsed = now.elapsed();
+    //let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
+    //println!("Seconds: {}", sec);
 }
 
 
