@@ -42,7 +42,7 @@ impl MultiItemModifier for AutoParallelise {
                 if let Some(analysed_function) = maybe_analysed_function {
                     // Merge the dependency trees
                     let mut base_deptree = dependency_analysis::analyse_block(&_block);
-                    dependency_analysis::merge_dependencies(&mut base_deptree, &analysed_function.encoded_deptree);
+                    dependency_analysis::replace_dependencies(&mut base_deptree, &analysed_function.encoded_deptree);
 
                     eprintln!("DEPTREE:");
                     for node in &base_deptree {

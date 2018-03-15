@@ -23,6 +23,7 @@ impl Environment {
         env
     }
     pub fn empty() -> Self {Environment{0:vec![]}}
+    pub fn clear(&mut self) {self.0.clear()}
     pub fn get(&self, i: usize) -> Option<&PathName> {self.0.get(i)}
     pub fn into_depstr(&self) -> EncodedEnvironment {
         let mut depstr = vec![];
@@ -278,16 +279,16 @@ pub fn encode_deptree(deptree: &DependencyTree) -> EncodedDependencyTree {
 }
 
 
-pub fn merge_dependencies(base: &mut DependencyTree, patch: &EncodedDependencyTree) {
+pub fn replace_dependencies(base: &mut DependencyTree, patch: &EncodedDependencyTree) {
     if base.len() != patch.len() {
         panic!("Lengths not equal: {:?} != {:?}", base, patch);
     }
     for i in 0..base.len() {
-        merge_dependencies_helper(&mut base[i], &patch[i]);
+        replace_dependencies_helper(&mut base[i], &patch[i]);
     }
 }
 
-fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependencyNode) {
+fn replace_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependencyNode) {
     // Get list of dependencies from the patch
     let (patch_deps, &(ref patch_inenv, ref patch_outenv)) = match patch {
         &EncodedDependencyNode::ExprBlock(_, _, ref deps, ref depstr) |
@@ -299,6 +300,10 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
     // Add the dependencies to the current node
     match base {
         &mut DependencyNode::ExprBlock(_, ref mut base_subtree, ref mut deps, ref mut env) => {
+            // Replacement instead of merge
+            deps.clear();
+            env.0.clear();
+            env.1.clear();
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
@@ -306,12 +311,16 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
             env.1.append(patch_outenv);
             // Recurse down the tree
             if let &EncodedDependencyNode::ExprBlock(_, ref patch_subtree, _, _) = patch {
-                merge_dependencies(base_subtree, patch_subtree);
+                replace_dependencies(base_subtree, patch_subtree);
             } else {
                 panic!("patch was not a exprblock: {:?}", patch);
             }
         },
         &mut DependencyNode::Block(_, ref mut base_subtree, ref mut deps, ref mut env) => {
+            // Replacement insdeps.clear();tead of merge
+            deps.clear();
+            env.0.clear();
+            env.1.clear();
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
@@ -319,12 +328,16 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
             env.1.append(patch_outenv);
             // Recurse down the tree
             if let &EncodedDependencyNode::Block(_, ref patch_subtree, _, _) = patch {
-                merge_dependencies(base_subtree, patch_subtree);
+                replace_dependencies(base_subtree, patch_subtree);
             } else {
                 panic!("patch was not a block: {:?}", patch);
             }
         },
         &mut DependencyNode::Expr(ref stmt, ref mut deps, ref mut env) => {
+            // Replacement instead of merge
+            deps.clear();
+            env.0.clear();
+            env.1.clear();
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();
@@ -342,6 +355,10 @@ fn merge_dependencies_helper(base: &mut DependencyNode, patch: &EncodedDependenc
             }
         },
         &mut DependencyNode::Mac(_, ref mut deps, ref mut env) => {
+            // Replacement instead of merge
+            deps.clear();
+            env.0.clear();
+            env.1.clear();
             deps.extend(patch_deps);
             deps.sort_unstable();
             deps.dedup();

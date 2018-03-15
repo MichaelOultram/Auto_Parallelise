@@ -30,8 +30,8 @@ fn main() {
     let test_hash = hash("test".to_owned());
     let word_hash = hash("word".to_owned());
 
-    //println!("test_hash = {}", test_hash);
-    //println!("word_hash = {}", word_hash);
+    println!("test_hash = {}", test_hash);
+    println!("word_hash = {}", word_hash);
 
     if test_hash == password_hash {
         println!("password: test");

@@ -34,6 +34,7 @@ fn compile(build_config: &Config, folder: &Path) -> String {
     // Compile first stage: Analysis
     let stage1output = Command::new("cargo").arg("build")
                                .current_dir(&folder)
+                               .env("RUST_BACKTRACE", "full")
                                .output().expect("Unable to compile analysis stage");
      println!("Stage 1 Output:\n{}\n\n\n", String::from_utf8_lossy(&stage1output.stderr));
 
@@ -41,6 +42,7 @@ fn compile(build_config: &Config, folder: &Path) -> String {
     let stage2output = Command::new("cargo")
                                .arg("build")
                                .current_dir(&folder)
+                               .env("RUST_BACKTRACE", "full")
                                .output().expect("Unable to compile modification stage");
     println!("Stage 2 Output:\n{}", String::from_utf8_lossy(&stage2output.stderr));
 
@@ -67,12 +69,8 @@ fn run(path: &Path) -> String {
     format!("{}", String::from_utf8_lossy(&cmdoutput.stdout))
 }
 
-fn cleanup(path: &Path) {
 
-}
-
-
-fn folder_code_and_run(parallel_code: &String, sequential_path: &Path) -> String {
+fn folder_code_and_compile(parallel_code: &String, sequential_path: &Path) -> String {
     // Create temp folder
     let parallel_folder = create_tmpfolder();
     fs::create_dir_all(format!("{}/src/", parallel_folder));
@@ -110,10 +108,9 @@ fn folder_code_and_run(parallel_code: &String, sequential_path: &Path) -> String
     let mut build_config = Config::default();
     build_config.plugin_enabled = false;
     compile(&build_config, &parallel_path);
-    run(&parallel_path)
 
-    // Cleanup path
-
+    // Return parallel_path
+    parallel_folder.clone()
 }
 
 fn compare_outputs(sequential_output: &String, parallel_output: &String) {
@@ -130,30 +127,36 @@ fn compare_outputs(sequential_output: &String, parallel_output: &String) {
 }
 
 fn test_foldered_program(folder: &str) {
+    // Create path and make sure it is clean
     let path = Path::new(&folder);
-
     clean(&path);
 
     // Configure build options
     let mut build_config = Config::default();
-
-    // Parallel build
-    println!("Parallel Build");
-    build_config.plugin_enabled = true;
-    let parallel_code = compile(&build_config, path.clone());
-    let parallel_output = folder_code_and_run(&parallel_code, &path);
 
     // Sequential build
     println!("Sequential Build");
     build_config.plugin_enabled = false;
     compile(&build_config, &path);
     let sequential_output = run(&path);
+    clean(&path);
 
+    // Parallel build
+    println!("Parallel Build");
+    build_config.plugin_enabled = true;
+    let parallel_code = compile(&build_config, &path);
+    let parallel_folder = folder_code_and_compile(&parallel_code, &path);
+    let parallel_path = Path::new(&parallel_folder);
+    let parallel_output = run(&parallel_path);
+    clean(&path);
 
     // Compare parallel_ouptut and sequential_output to make sure they are the same
     println!("Sequential Output:\n{}", sequential_output);
     println!("Parallel Output:\n{}", parallel_output);
     compare_outputs(&sequential_output, &parallel_output);
+
+    // Remove parallel folder
+    fs::remove_dir_all(&parallel_path);
 }
 
 
