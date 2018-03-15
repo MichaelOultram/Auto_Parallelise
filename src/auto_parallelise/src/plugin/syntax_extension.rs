@@ -17,7 +17,7 @@ use plugin::shared_state::Function;
 impl MultiItemModifier for AutoParallelise {
     fn expand(&self, cx: &mut ExtCtxt, _span: Span, _meta_item: &ast::MetaItem, _item: Annotatable) -> Vec<Annotatable> {
         // Only make changes when on the Modification stage
-        if !self.config.enabled || self.compiler_stage != CompilerStage::Modification {
+        if !self.config.plugin_enabled || self.compiler_stage != CompilerStage::Modification {
             return vec![_item];
         }
         let mut output = vec![];
@@ -70,16 +70,27 @@ impl MultiItemModifier for AutoParallelise {
                     // Convert schedule into multi-threadded code
                     let parstmts = reconstructor::spawn_from_schedule(cx, schedule);
                     let parblock = reconstructor::create_block(cx, parstmts);
-                    let parthread = quote_stmt!(cx, ::std::thread::spawn(move || $parblock)).unwrap();
-                    let parthreadblock = reconstructor::create_block(cx, vec![parthread]);
-                    // Convert function into use new_block
-                    let (parident, parfunction) = reconstructor::create_function(cx, item, &format!("{}_parallel", func_name), true, parthreadblock);
-                    let (seqident, seqfunction) = reconstructor::create_seq_fn(cx, &func_name, &parident, &item);
-                    // Prints the function
-                    println!("{}\n{}\n", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
+                    if self.config.parallel_function_body {
+                        // Surround function body in a thread
+                        let parthread = quote_stmt!(cx, ::std::thread::spawn(move || $parblock)).unwrap();
+                        let parthreadblock = reconstructor::create_block(cx, vec![parthread]);
+                        // Convert function into use new_block
+                        let (parident, parfunction) = reconstructor::create_function(cx, item, &format!("{}_parallel", func_name), true, parthreadblock);
+                        let (seqident, seqfunction) = reconstructor::create_seq_fn(cx, &func_name, &parident, &item);
+                        // Prints the function
+                        println!("{}\n{}\n", pprust::item_to_string(&parfunction), pprust::item_to_string(&seqfunction));
 
-                    output.push(Annotatable::Item(P(parfunction)));
-                    output.push(Annotatable::Item(P(seqfunction)));
+                        output.push(Annotatable::Item(P(parfunction)));
+                        output.push(Annotatable::Item(P(seqfunction)));
+                    } else {
+                        // Do not surround in a thread
+                        let (parident, parfunction) = reconstructor::create_function(cx, item, &func_name, false, parblock);
+                        // Prints the function
+                        println!("{}\n", pprust::item_to_string(&parfunction));
+
+                        output.push(Annotatable::Item(P(parfunction)));
+                    }
+
                 } else {
                     panic!("{} was not found as an analysed function", func_name);
                 }

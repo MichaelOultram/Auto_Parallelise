@@ -37,11 +37,11 @@ pub fn plugin_registrar(reg: &mut Registry) {
         CompilerStage::Modification => 2,
     };
 
-    if obj.config.enabled {
-        obj.config.enabled = reg.args().len() == 0;
+    if obj.config.plugin_enabled {
+        obj.config.plugin_enabled = reg.args().len() == 0;
     }
     eprintln!("[auto_parallelise] Stage {} of 2 - {:?}", stage, obj.compiler_stage);
-    if !obj.config.enabled {
+    if !obj.config.plugin_enabled {
         eprintln!("[auto_parallelise] Plugin Disabled")
     }
     // Second pass uses the syntax extension

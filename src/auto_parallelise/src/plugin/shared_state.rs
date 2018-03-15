@@ -52,12 +52,16 @@ pub type EncodedInOutEnvironment = (EncodedEnvironment, EncodedEnvironment);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub enabled: bool,
+    pub plugin_enabled: bool,
+    pub parallel_function_body: bool, // Wraps entire function body in a thread. Changes return type of function
+    pub parallel_for_loops: bool,
 }
 impl Config {
     pub fn default() -> Self {
         Config {
-            enabled: true,
+            plugin_enabled: true,
+            parallel_function_body: false,
+            parallel_for_loops: false,
         }
     }
 

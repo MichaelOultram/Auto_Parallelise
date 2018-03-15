@@ -218,6 +218,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
                     let stmt = if let Some(node_stmt) = mnode_stmt {
                         // If the block has no external dependencies, then it can be run in parallel
                         let (ref inenv, _) = schedule.get_env();
+                        // TODO: Send inenv so that for loops can be parallelised.
                         exprblock_into_statement(node_stmt.deref().clone(), exprblock, inenv.len() == 0)
                     } else {
                         quote_stmt!(cx, $exprblock).unwrap()

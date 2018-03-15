@@ -108,7 +108,7 @@ fn folder_code_and_run(parallel_code: &String, sequential_path: &Path) -> String
 
     // Compile with plugin disabled and run
     let mut build_config = Config::default();
-    build_config.enabled = false;
+    build_config.plugin_enabled = false;
     compile(&build_config, &parallel_path);
     run(&parallel_path)
 
@@ -139,13 +139,13 @@ fn test_foldered_program(folder: &str) {
 
     // Parallel build
     println!("Parallel Build");
-    build_config.enabled = true;
+    build_config.plugin_enabled = true;
     let parallel_code = compile(&build_config, path.clone());
     let parallel_output = folder_code_and_run(&parallel_code, &path);
 
     // Sequential build
     println!("Sequential Build");
-    build_config.enabled = false;
+    build_config.plugin_enabled = false;
     compile(&build_config, &path);
     let sequential_output = run(&path);
 
