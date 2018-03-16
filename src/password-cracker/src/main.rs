@@ -1,5 +1,5 @@
 #![feature(plugin)]
-#![plugin(auto_parallelise(1))]
+#![plugin(auto_parallelise)]
 
 extern crate crypto;
 use self::crypto::digest::Digest;
@@ -42,17 +42,14 @@ fn crack_password(dictionary: Vec<String>, password_hash: String) -> Option<Stri
     let mut hashes = vec![];
     for id in 0..dictionary.len() {
         let word = dictionary[id];
-        hashes.push((word, None));
+        let hash_word = hash(word);
+        hashes.push(hash_word);
     }
-    for (word, mut mhash_word) in hashes {
-        mhash_word = Some(hash(word));
-    }
-
-    for (word, mhash_word) in hashes {
-        if let Some(hash_word) = mhash_word {
-            if hash_word == password_hash {
-                return Some(word);
-            }
+    for id in 0..dictionary.len() {
+        let hash_word = hashes[id];
+        if hash_word == password_hash {
+            let word = dictionary[id];
+            return Some(word);
         }
     }
     return None;
@@ -66,7 +63,13 @@ fn main() {
     let dictionary = load_dictionary();
     let password_hash = format!("be9f36142cf64f3804323c8f29bc5822d01e60f7849244c59ff42de38d11fa37");
 
-    crack_password(dictionary, password_hash);
+    let mpassword = crack_password(dictionary, password_hash);
+
+    if let Some(password) = mpassword {
+        println!("Password is {}", password);
+    } else {
+        println!("Password not found in dictionary");
+    }
 
     for i in 0..4 {
         println!("Done");

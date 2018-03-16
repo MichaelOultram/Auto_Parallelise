@@ -1,8 +1,12 @@
 use parallel_stages::dependency_analysis::{DependencyTree, DependencyNode, StmtID, Environment, InOutEnvironment};
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);
 impl<'a> Schedule<'a> {
+    pub fn new(list: Vec<ScheduleTree<'a>>) -> Self {
+        Schedule(list)
+    }
+
     pub fn get_all_synclines(&self) -> Vec<(StmtID, StmtID, &Environment)> {
         let mut synclines = vec![];
         for tree in &(self.0) {
@@ -29,7 +33,7 @@ impl<'a> Schedule<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ScheduleTree<'a> {
     // Prerequisite dependencies, Current Statement + Children
     Node(Vec<StmtID>, SpanningTree<'a>),
@@ -92,7 +96,7 @@ impl<'a> ScheduleTree<'a>{
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SpanningTree<'a> {
     pub node: &'a DependencyNode,
     pub weight: u32,

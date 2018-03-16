@@ -166,12 +166,14 @@ pub fn create_seq_fn(cx: &mut ExtCtxt, seq_fn_name: &String, parident: &Ident, i
 fn unwrap_stmts_to_blocks(stmts: &Vec<Stmt>) -> Vec<Block> {
     eprintln!("unwrap_stmts_to_blocks({:?})", stmts);
     let mut output = vec![];
-    for id in 0..stmts.len() - 1 { // Ignore last statement as it will be return_type
-        let stmt = &stmts[id];
-        let expr = match stmt.node {
-            StmtKind::Local(ref local) =>
-                if let Some(ref expr) = local.init {
-                    if id == stmts.len() - 2 { // Second to last statement will have double block
+    for id in 0..stmts.len() {
+        // Work in pairs as stmt is in style of:
+        // let return_value = block; return_value; let return_value = block; return_value;
+        if id % 2 == 0 { // Even id's only
+            let stmt = &stmts[id];
+            let expr = {
+                if let StmtKind::Local(ref local) = stmt.node {
+                    if let Some(ref expr) = local.init {
                         if let ExprKind::Block(ref outer_block) = expr.deref().node {
                             let inner_stmts = &outer_block.deref().stmts;
                             assert!(inner_stmts.len() == 1, format!("Inner Stmts has {} statments: {:?}", inner_stmts.len(), inner_stmts));
@@ -193,21 +195,17 @@ fn unwrap_stmts_to_blocks(stmts: &Vec<Stmt>) -> Vec<Block> {
                             panic!("Was not a let = block: {:?}", stmt);
                         }
                     } else {
-                        expr
+                        panic!("Was just a let pattern;: {:?}", stmt);
                     }
                 } else {
-                    panic!("No expression");
-                },
-
-            // A line in a function
-            StmtKind::Expr(ref expr) |
-            StmtKind::Semi(ref expr) => expr,
-            _ => panic!("Unexpected StmtKind"),
-        };
-        if let ExprKind::Block(ref block) = expr.deref().node {
-            output.push(block.deref().clone());
-        } else {
-            panic!("Was not a block: {:?}", stmt);
+                    panic!("Was not a let return_value: {:?}", stmt);
+                }
+            };
+            if let ExprKind::Block(ref block) = expr.deref().node {
+                output.push(block.deref().clone());
+            } else {
+                panic!("Was not a block: {:?}", stmt);
+            }
         }
     }
     output
@@ -278,7 +276,13 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
                         },
                         &DependencyNode::ExprBlock(ref exprblockstmt, _, _, _) => {
                             // Add block to the schedule
-                            let mut inner_blocks_stmts = spawn_from_schedule_helper(cx, schedule.list(), all_synclines);
+                            eprintln!("ScheduleTree Block ExprBlock: {:?}", exprblockstmt);
+                            let mut inner_blocks_stmts = vec![];
+                            for inner_schedule_tree in schedule.list() {
+                                let inner_schedule: Vec<ScheduleTree<'a>> = vec![inner_schedule_tree.clone()];
+                                let mut inner_block_stmt = spawn_from_schedule_helper(cx, &inner_schedule, all_synclines);
+                                inner_blocks_stmts.append(&mut inner_block_stmt);
+                            }
                             let mut inner_blocks = unwrap_stmts_to_blocks(&inner_blocks_stmts);
                             let mut mnode_stmt = spanning_tree.node.get_stmt();
                             let stmt =
@@ -286,7 +290,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
                                     // If the block has no external dependencies, then it can be run in parallel
                                     let (ref inenv, _) = schedule.get_env();
                                     // TODO: Send inenv so that for loops can be parallelised.
-                                    exprblock_into_statement(node_stmt.deref().clone(), &mut inner_blocks, inenv.len() == 0)
+                                    exprblock_into_statement(node_stmt.deref().clone(), &mut inner_blocks, inenv)
                                 } else {
                                     let exprblock = create_block(cx, inner_blocks_stmts, Some(stmtID!(exprblockstmt)));
                                     quote_stmt!(cx, $exprblock).unwrap()
@@ -304,11 +308,17 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
 
             if i == sch.len() - 1 {
                 // Last uses the current thread
-                // Place in a block so that we can get the correct return type
-                let return_block = create_block(cx, thread_contents, None);
-                let let_stmt = quote_stmt!(cx, let return_value = $return_block;).unwrap();
-                output.push(let_stmt);
-                add_return_value = true;
+                if true { // TODO: threads.len() > 0 {
+                    // Place in a block so that we can get the correct return_value
+                    let return_block = create_block(cx, thread_contents, None);
+                    let let_stmt = quote_stmt!(cx, let return_value = $return_block;).unwrap();
+                    output.push(let_stmt);
+                    add_return_value = true;
+                } else {
+                    // No threads to join so don't need messy return_value
+                    // TODO: This breaks unwrap_stmts_to_blocks
+                    output.append(&mut thread_contents);
+                }
             } else {
                 // All execpt the last is put into a concurrent thread
                 let (thread_name, thread_stmt) = create_thread(cx, lo, hi, thread_contents);
@@ -331,8 +341,8 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
     output
 }
 
-fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, parallel: bool) -> Stmt {
-    eprintln!("Parallel block: {}", parallel); //TODO: Make exprblock run in parallel if parallel
+fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, inenv: &Environment) -> Stmt {
+    eprintln!("exprblock_into_statement({:?}, {:?}, {:?})", exprstmt, exprblocks, inenv);
     // Extract expr
     let expr = match exprstmt.node {
         StmtKind::Local(ref local) =>
@@ -351,42 +361,44 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, paralle
     // Create new exprnode with exprblock
     let new_exprnode = match expr.node {
         ExprKind::If(ref a, ref empty_block, ref c) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
+            // TODO: Add else clause if it is a block
             ExprKind::If(a.clone(), P(exprblock), c.clone())
         },
         ExprKind::IfLet(ref a, ref b, ref empty_block, ref c) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::IfLet(a.clone(), b.clone(), P(exprblock), c.clone())
         },
         ExprKind::While(ref a, ref empty_block, ref b) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::While(a.clone(), P(exprblock), b.clone())
         } ,
         ExprKind::WhileLet(ref a, ref b, ref empty_block, ref c) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::WhileLet(a.clone(), b.clone(), P(exprblock), c.clone())
         },
         ExprKind::ForLoop(ref a, ref b, ref empty_block, ref c) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
+            eprintln!("exprblock in forloop: {:?}", exprblock);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::ForLoop(a.clone(), b.clone(), P(exprblock), c.clone())
         },
         ExprKind::Loop(ref empty_block, ref a) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::Loop(P(exprblock), a.clone())
         },
         ExprKind::Block(ref empty_block) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::Block(P(exprblock))
         },
         ExprKind::Catch(ref empty_block) => {
-            let exprblock = exprblocks.pop().unwrap();
+            let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::Catch(P(exprblock))
         },
@@ -397,7 +409,7 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, paralle
                 if let ExprKind::Block(ref empty_block) = arm.body.deref().node {
                     let expr = arm.body.deref();
                     // Find block in exprblocks with the same id as empty_block
-                    let exprblock = exprblocks.pop().unwrap();
+                    let exprblock = exprblocks.remove(0);
                     assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
                     new_arms.push(ast::Arm {
                         attrs: arm.attrs.clone(),
@@ -418,6 +430,8 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, paralle
         },
         _ => panic!("Unexpected ExprKind: {:?}", expr.node),
     };
+
+    assert!(exprblocks.len() == 0, format!("Did not consume all of exprblocks: {:?}", exprblocks));
 
     // Create new expr
     let mut new_expr = expr.deref().clone();
