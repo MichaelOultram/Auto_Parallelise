@@ -528,7 +528,7 @@ pub fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironm
             ExprKind::Mac(_) => vec![],
 
             // Unused expressions, panic if used
-            _ => panic!(format!("Unmatched expression: {:?}", expr.node)),
+            _ => panic!("Unmatched expression: {:?}", expr.node),
         }
     };
 
@@ -613,7 +613,9 @@ pub fn check_pattern(sub_blocks: &mut DependencyTree, patkind: &PatKind) -> Envi
             }
         },
 
-        _ => {},
+        &PatKind::Wild => {},
+
+        _ => panic!("Unmatched pattern: {:?}", patkind),
     }
 
     env

@@ -69,11 +69,11 @@ impl MultiItemModifier for AutoParallelise {
 
                     // Convert schedule into multi-threadded code
                     let parstmts = reconstructor::spawn_from_schedule(cx, schedule);
-                    let parblock = reconstructor::create_block(cx, parstmts);
+                    let parblock = reconstructor::create_block(cx, parstmts, None);
                     if self.config.parallel_function_body {
                         // Surround function body in a thread
                         let parthread = quote_stmt!(cx, ::std::thread::spawn(move || $parblock)).unwrap();
-                        let parthreadblock = reconstructor::create_block(cx, vec![parthread]);
+                        let parthreadblock = reconstructor::create_block(cx, vec![parthread], None);
                         // Convert function into use new_block
                         let (parident, parfunction) = reconstructor::create_function(cx, item, &format!("{}_parallel", func_name), true, parthreadblock);
                         let (seqident, seqfunction) = reconstructor::create_seq_fn(cx, &func_name, &parident, &item);

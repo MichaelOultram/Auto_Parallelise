@@ -137,7 +137,8 @@ impl Serialize for DependencyNode {
     {
         match self {
             &DependencyNode::Expr(ref stmt, ref deps, ref env) => {
-                let mut state = serializer.serialize_struct("Expr", 4)?;
+                let mut state = serializer.serialize_struct("Expr", 5)?;
+                state.serialize_field("type", "Expr")?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 state.serialize_field("stmt", &pprust::stmt_to_string(stmt))?;
                 state.serialize_field("deps", deps)?;
@@ -145,7 +146,8 @@ impl Serialize for DependencyNode {
                 state.end()
             },
             &DependencyNode::Block(ref stmt, ref tree, ref deps, ref env) => {
-                let mut state = serializer.serialize_struct("Block", 3)?;
+                let mut state = serializer.serialize_struct("Block", 4)?;
+                state.serialize_field("type", "Block")?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 state.serialize_field("subtree", tree)?;
                 state.serialize_field("env", env)?;
@@ -154,7 +156,8 @@ impl Serialize for DependencyNode {
                 state.end()
             },
             &DependencyNode::ExprBlock(ref stmt, ref tree, ref deps, ref env) => {
-                let mut state = serializer.serialize_struct("ExprBlock", 5)?;
+                let mut state = serializer.serialize_struct("ExprBlock", 6)?;
+                state.serialize_field("type", "ExprBlock")?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 state.serialize_field("stmt", &pprust::stmt_to_string(stmt))?;
                 state.serialize_field("deps", deps)?;
@@ -163,7 +166,8 @@ impl Serialize for DependencyNode {
                 state.end()
             },
             &DependencyNode::Mac(ref stmt, ref deps, ref env) => {
-                let mut state = serializer.serialize_struct("Mac", 4)?;
+                let mut state = serializer.serialize_struct("Mac", 5)?;
+                state.serialize_field("type", "Mac")?;
                 state.serialize_field("stmtid", &format!("{:?}", self.get_stmtid()))?;
                 state.serialize_field("stmt", &pprust::stmt_to_string(stmt))?;
                 state.serialize_field("deps", deps)?;
