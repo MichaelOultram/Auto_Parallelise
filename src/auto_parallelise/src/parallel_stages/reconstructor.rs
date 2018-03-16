@@ -164,12 +164,37 @@ pub fn create_seq_fn(cx: &mut ExtCtxt, seq_fn_name: &String, parident: &Ident, i
 }
 
 fn unwrap_stmts_to_blocks(stmts: &Vec<Stmt>) -> Vec<Block> {
+    eprintln!("unwrap_stmts_to_blocks({:?})", stmts);
     let mut output = vec![];
-    for stmt in stmts {
+    for id in 0..stmts.len() - 1 { // Ignore last statement as it will be return_type
+        let stmt = &stmts[id];
         let expr = match stmt.node {
             StmtKind::Local(ref local) =>
                 if let Some(ref expr) = local.init {
-                    expr
+                    if id == stmts.len() - 2 { // Second to last statement will have double block
+                        if let ExprKind::Block(ref outer_block) = expr.deref().node {
+                            let inner_stmts = &outer_block.deref().stmts;
+                            assert!(inner_stmts.len() == 1, format!("Inner Stmts has {} statments: {:?}", inner_stmts.len(), inner_stmts));
+                            let inner_stmt = &inner_stmts[0];
+                            match inner_stmt.node {
+                                StmtKind::Local(ref local) =>
+                                    if let Some(ref expr) = local.init {
+                                        expr
+                                    } else {
+                                        panic!("No expression");
+                                    },
+
+                                // A line in a function
+                                StmtKind::Expr(ref expr) |
+                                StmtKind::Semi(ref expr) => expr,
+                                _ => panic!("Unexpected StmtKind"),
+                            }
+                        } else {
+                            panic!("Was not a let = block: {:?}", stmt);
+                        }
+                    } else {
+                        expr
+                    }
                 } else {
                     panic!("No expression");
                 },
@@ -191,6 +216,7 @@ fn unwrap_stmts_to_blocks(stmts: &Vec<Stmt>) -> Vec<Block> {
 fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, all_synclines: &Vec<(StmtID, StmtID, &Environment)>) -> Vec<Stmt> {
     let mut output = vec![];
     let mut threads = vec![];
+    let mut add_return_value = false;
 
     for i in 0..sch.len() {
         if let ScheduleTree::SyncTo(ref stmtid1, ref stmtid2, ref env) = sch[i] {
@@ -278,7 +304,11 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
 
             if i == sch.len() - 1 {
                 // Last uses the current thread
-                output.append(&mut thread_contents);
+                // Place in a block so that we can get the correct return type
+                let return_block = create_block(cx, thread_contents, None);
+                let let_stmt = quote_stmt!(cx, let return_value = $return_block;).unwrap();
+                output.push(let_stmt);
+                add_return_value = true;
             } else {
                 // All execpt the last is put into a concurrent thread
                 let (thread_name, thread_stmt) = create_thread(cx, lo, hi, thread_contents);
@@ -292,6 +322,10 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
     for thread in threads {
         let thread_stmt = quote_stmt!(cx, $thread.join().unwrap();).unwrap();
         output.push(thread_stmt);
+    }
+
+    if add_return_value {
+        output.push(quote_stmt!(cx, return_value).unwrap());
     }
 
     output
