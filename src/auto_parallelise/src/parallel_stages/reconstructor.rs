@@ -360,17 +360,7 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, inenv: 
 
     // Create new exprnode with exprblock
     let new_exprnode = match expr.node {
-        ExprKind::If(ref a, ref empty_block, ref c) => {
-            let exprblock = exprblocks.remove(0);
-            assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
-            // TODO: Add else clause if it is a block
-            ExprKind::If(a.clone(), P(exprblock), c.clone())
-        },
-        ExprKind::IfLet(ref a, ref b, ref empty_block, ref c) => {
-            let exprblock = exprblocks.remove(0);
-            assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
-            ExprKind::IfLet(a.clone(), b.clone(), P(exprblock), c.clone())
-        },
+        // One block
         ExprKind::While(ref a, ref empty_block, ref b) => {
             let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
@@ -380,12 +370,6 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, inenv: 
             let exprblock = exprblocks.remove(0);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::WhileLet(a.clone(), b.clone(), P(exprblock), c.clone())
-        },
-        ExprKind::ForLoop(ref a, ref b, ref empty_block, ref c) => {
-            let exprblock = exprblocks.remove(0);
-            eprintln!("exprblock in forloop: {:?}", exprblock);
-            assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
-            ExprKind::ForLoop(a.clone(), b.clone(), P(exprblock), c.clone())
         },
         ExprKind::Loop(ref empty_block, ref a) => {
             let exprblock = exprblocks.remove(0);
@@ -402,6 +386,61 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, inenv: 
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
             ExprKind::Catch(P(exprblock))
         },
+
+        // Two blocks (maybe)
+        ExprKind::If(ref a, ref empty_block, ref c) => {
+            let thenblock = exprblocks.remove(0);
+            assert!(stmtID!(empty_block) == stmtID!(thenblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(thenblock)));
+            let elseblock = if let &Some(ref expr) = c {
+                let expr = expr.deref();
+                let exprblock = exprblocks.remove(0);
+                assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
+                Some(P(Expr {
+                    id: expr.id.clone(),
+                    node: ExprKind::Block(P(exprblock)),
+                    span: expr.span.clone(),
+                    attrs: expr.attrs.clone(),
+                }))
+            } else {
+                c.clone()
+            };
+            ExprKind::If(a.clone(), P(thenblock), elseblock)
+        },
+        ExprKind::IfLet(ref a, ref b, ref empty_block, ref c) => {
+            let thenblock = exprblocks.remove(0);
+            assert!(stmtID!(empty_block) == stmtID!(thenblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(thenblock)));
+            let elseblock = if let &Some(ref expr) = c {
+                let expr = expr.deref();
+                let exprblock = exprblocks.remove(0);
+                assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
+                Some(P(Expr {
+                    id: expr.id.clone(),
+                    node: ExprKind::Block(P(exprblock)),
+                    span: expr.span.clone(),
+                    attrs: expr.attrs.clone(),
+                }))
+            } else {
+                c.clone()
+            };
+            ExprKind::IfLet(a.clone(), b.clone(), P(thenblock), elseblock)
+        },
+
+        // Special parallel loop iterations (maybe)
+        ExprKind::ForLoop(ref a, ref b, ref empty_block, ref c) => {
+            let exprblock = exprblocks.remove(0);
+            eprintln!("exprblock in forloop: {:?}", exprblock);
+            assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
+            if self.config.parallel_for_loops {
+                if let ExprKind::Range(_,_,_) = b.deref().node {
+                    eprintln!("Possible FORLOOP Parallelisation");
+
+                    // Special Case: Return early
+                }
+            }
+            ExprKind::ForLoop(a.clone(), b.clone(), P(exprblock), c.clone())
+        },
+
+        // Any number of blocks
         ExprKind::Match(ref expr1, ref arml) => {
             let mut new_arms = vec![];
             for arm in arml {
