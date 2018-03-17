@@ -57,10 +57,64 @@ fn g(b: &mut u32){} // g mutably borrows b
 In the \texttt{main} method of this example, \texttt{a} is an immutable local variable and \texttt{b} is a mutable local variable. The \texttt{f} function borrows both \texttt{a} and \texttt{b} immutably. Even though \texttt{b} is declared as mutable, it cannot be changed inside \texttt{f}. Once \texttt{f} returns, \texttt{b} becomes mutable again inside the \texttt{main} method. The \texttt{g} function shows how \texttt{b} can be borrowed mutably.
 
 \subsubsection{Unsafe Blocks}
-The programmer may want can turn off some of rust's safety features by using an unsafe block. The most common use of an unsafe block is to modify a mutable static variable but it also allows de-referencing of a raw pointer and calling unsafe functions (i.e. an external c function).
+The programmer may want can turn off some of rust's safety features by using an unsafe block. The most common use of an unsafe block is to modify a mutable static variable but it also allows de-referencing of a raw pointer and calling unsafe functions (i.e. an external c function). Using unsafe blocks may introduce race conditions as two threads could try to modify a global at the same time, and the rust language would not guarantee an order.
+
+\begin{code}
+\begin{minted}{rust}
+static mut global: u32 = 3;
+fn main() {
+    let a = global;
+    inc_global();
+    unsafe {
+        global = 5;
+    }
+}
+
+unsafe fn inc_global() {
+    global += 1;
+}
+\end{minted}
+\caption{Immutable and mutable borrowing}
+\end{code}
 
 \subsection{Threads}
-\subsubsection{Moving}
-\subsubsection{Overhead}
+Rust uses real threads.
+\subsubsection{Channels}
 
 \subsection{Crates}
+
+\section{Related Work}
+\label{sec:related-work}
+
+\subsection{Parallelisation Models}
+\label{sec:related-models}
+In this section, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimising memory access patterns for multiple threads can increase performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel thread is `undone' and rerun.
+
+\subsubsection{Static parallelism}
+% Polyhedral model and affine transformation
+\textcite{Feautrier1992} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities. Finding a solution where these linear inequalities hold produces a schedule for the program where dependent statements are executed in order. There are some programs where no affine schedule exists.
+\textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed to minimise the communication between threads, further increasing the performance of the parallelised code.
+
+% Iteration space slicing > affine transformations
+An alternative method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. ``Iteration space slicing takes dependency information as input to find all statement instances from a given loop nest which must be executed to produce the correct result''. \textcite{Pugh1997} shows how this information can be used to transform loops on example programs to produce a real world speedup. \textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than affine scheduling.
+
+\subsubsection{Speculative parallelism}
+% Third option: Speculation
+\textcite{Zhong2008} shows that there is some parallelisable parts hidden in loops that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that same location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
+
+\textcite{Prabhu2010} introduce two new language constructs for C\# to allow the programmer to manually specify areas of the program that can be speculatively parallelised. \textcite{Yiapanis2015} designs a parallelising compiler which can automatically take advantage of speculative parallelism.
+
+\subsection{Parallelisation Implementations}
+In this section we look at: parallelising compilers which focus on parallelising FORTRAN programs; OpenMP which is an model for shared memory programming and parallelising compilers which convert sequential CPU code into parallelised GPU code. Some of these parallelising compilers are based off of models described in \autoref{sec:related-models}.
+
+\textcite{Eigenmann1998} manually parallelises the PERFECT benchmarks for FORTRAN which are compared with the original versions to calculate the potential speedup of an automatic parallelising compiler.
+\textcite{DHollander1998} developed a FORTRAN transformer which reconstructs code using \texttt{GOTO} statements so that more parallelisms can be detected. It performs dependency analysis and automatically parallelised loops by splitting the task into jobs. These jobs can be split between networked machines to run more jobs concurrently.
+\textcite{Rauchwerger1999} introduce a new language construct for FORTRAN programs which allows for run-time speculative parallelism on for loops. Their implementation parallelises some parts of the PERFECT benchmarks which existing parallelising compilers of the time could not find.
+
+\textcite{Quinones2005} introduce the Mitosis compiler which combines speculation with iteration space slicing. There is always only one non-speculative thread which is seen as the base execution; all other threads are speculative. The Mitosis compiler computes the probability of two iterations conflicting. If this probability is low, and there is a spare thread unit, then the loop iteration is executed in parallel. The non-speculative thread detects any conflicts as it is the only thread that can commit results.
+
+\textcite{Dagum1998} introduces a programming interface for shared memory multiprocessors called OpenMP targeted at FORTRAN, C and C++. The programmer annotates the elements of the program that are parallelisable, which the compiler recognises and performs the optimisation. OpenMP is compared to alterative parallel programming models.
+\textcite{Kim2000} introduces the ICP-PFC compiler for FORTRAN which uses the OpenMP model. All loops in the source code are analysed by calculated a dependency matrix. The compiler automatically adds the relevant OpenMP annotations to the loop.
+\textcite{Lam2011} extends OpenMP using machine learning to automate the parallelisation. The system is trained using a set containing programs already parallelised using OpenMP. The knowledge learned is applied to sequential programs to produce parallelised programs.
+
+A CPUs architecture is typically optimised for latency whereas a GPUs architecture is typically optimised for throughput. This can make GPUs perform much better that CPUs for a certain type of task. \textcite{Baskaran2010} uses the affine transformation model to convert sequential C code into parallelised CUDA code. \texttt{For} loops are tiled for efficient execution on the GPU.
