@@ -68,7 +68,7 @@ impl MultiItemModifier for AutoParallelise {
                     eprintln!("{}", dot::schedule_to_dot(&schedule));
 
                     // Convert schedule into multi-threadded code
-                    let parstmts = reconstructor::spawn_from_schedule(cx, schedule);
+                    let parstmts = reconstructor::spawn_from_schedule(&self.config, cx, schedule);
                     let parblock = reconstructor::create_block(cx, parstmts, None);
                     if self.config.parallel_function_body {
                         // Surround function body in a thread

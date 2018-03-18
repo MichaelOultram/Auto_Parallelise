@@ -7,6 +7,7 @@ use std::ops::Deref;
 use parallel_stages::{dependency_analysis, scheduler, deconstructor};
 use self::dependency_analysis::{Environment, PathName, StmtID, DependencyNode};
 use self::scheduler::{Schedule, ScheduleTree};
+use plugin::shared_state::Config;
 
 pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>, stmtid: Option<StmtID>) -> Block {
     let block = quote_block!(cx, {});
@@ -96,7 +97,7 @@ fn syncline_env(synclines: &Vec<(StmtID, StmtID, &Environment)>, to_a: u32, to_b
     panic!("Cannot find syncline ({}_{}_{}_{}) and so cannot return environment", to_a, to_b, from_a, from_b)
 }
 
-pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt> {
+pub fn spawn_from_schedule<'a>(config: &Config, cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt> {
     // Gather all the synclines and create them as variables
     let synclines = schedule.get_all_synclines();
     eprintln!("Synclines:\n{:?}\n", synclines);
@@ -108,7 +109,7 @@ pub fn spawn_from_schedule<'a>(cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt
         let stmt = quote_stmt!(cx, let ($sx, $rx) = std::sync::mpsc::channel()).unwrap();
         stmts.push(stmt);
     }
-    let mut body: Vec<Stmt> = spawn_from_schedule_helper(cx, schedule.list(), &synclines);
+    let mut body: Vec<Stmt> = spawn_from_schedule_helper(config, cx, schedule.list(), &synclines);
     stmts.append(&mut body);
     stmts
 }
@@ -211,7 +212,7 @@ fn unwrap_stmts_to_blocks(stmts: &Vec<Stmt>) -> Vec<Block> {
     output
 }
 
-fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, all_synclines: &Vec<(StmtID, StmtID, &Environment)>) -> Vec<Stmt> {
+fn spawn_from_schedule_helper<'a>(config: &Config, cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>, all_synclines: &Vec<(StmtID, StmtID, &Environment)>) -> Vec<Stmt> {
     let mut output = vec![];
     let mut threads = vec![];
     let mut add_return_value = false;
@@ -249,7 +250,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
                     }
 
                     // Spawn children after node
-                    let children = spawn_from_schedule_helper(cx, &spanning_tree.children, all_synclines);
+                    let children = spawn_from_schedule_helper(config, cx, &spanning_tree.children, all_synclines);
 
                     // Return node id
                     (spanning_tree.node.get_stmtid(), children)
@@ -268,7 +269,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
                     match spanning_tree.node {
                         &DependencyNode::Block(ref stmtid, _, _, _) => {
                             // Add block to the schedule
-                            let mut inner_block = spawn_from_schedule_helper(cx, schedule.list(), all_synclines);
+                            let mut inner_block = spawn_from_schedule_helper(config, cx, schedule.list(), all_synclines);
                             let exprblock = create_block(cx, inner_block, Some(*stmtid));
                             let mut mnode_stmt = spanning_tree.node.get_stmt();
                             let stmt = quote_stmt!(cx, $exprblock).unwrap();
@@ -280,7 +281,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
                             let mut inner_blocks_stmts = vec![];
                             for inner_schedule_tree in schedule.list() {
                                 let inner_schedule: Vec<ScheduleTree<'a>> = vec![inner_schedule_tree.clone()];
-                                let mut inner_block_stmt = spawn_from_schedule_helper(cx, &inner_schedule, all_synclines);
+                                let mut inner_block_stmt = spawn_from_schedule_helper(config, cx, &inner_schedule, all_synclines);
                                 inner_blocks_stmts.append(&mut inner_block_stmt);
                             }
                             let mut inner_blocks = unwrap_stmts_to_blocks(&inner_blocks_stmts);
@@ -290,7 +291,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
                                     // If the block has no external dependencies, then it can be run in parallel
                                     let (ref inenv, _) = schedule.get_env();
                                     // TODO: Send inenv so that for loops can be parallelised.
-                                    exprblock_into_statement(node_stmt.deref().clone(), &mut inner_blocks, inenv)
+                                    exprblock_into_statement(config, node_stmt.deref().clone(), &mut inner_blocks, inenv)
                                 } else {
                                     let exprblock = create_block(cx, inner_blocks_stmts, Some(stmtID!(exprblockstmt)));
                                     quote_stmt!(cx, $exprblock).unwrap()
@@ -341,7 +342,7 @@ fn spawn_from_schedule_helper<'a>(cx: &mut ExtCtxt, sch: &Vec<ScheduleTree<'a>>,
     output
 }
 
-fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, inenv: &Environment) -> Stmt {
+fn exprblock_into_statement(config: &Config, exprstmt: Stmt, exprblocks: &mut Vec<Block>, inenv: &Environment) -> Stmt {
     eprintln!("exprblock_into_statement({:?}, {:?}, {:?})", exprstmt, exprblocks, inenv);
     // Extract expr
     let expr = match exprstmt.node {
@@ -430,7 +431,7 @@ fn exprblock_into_statement(exprstmt: Stmt, exprblocks: &mut Vec<Block>, inenv: 
             let exprblock = exprblocks.remove(0);
             eprintln!("exprblock in forloop: {:?}", exprblock);
             assert!(stmtID!(empty_block) == stmtID!(exprblock), format!("stmtID!({:?}) == stmtID!({:?})", stmtID!(empty_block), stmtID!(exprblock)));
-            if self.config.parallel_for_loops {
+            if config.parallel_for_loops {
                 if let ExprKind::Range(_,_,_) = b.deref().node {
                     eprintln!("Possible FORLOOP Parallelisation");
 

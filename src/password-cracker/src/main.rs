@@ -14,8 +14,8 @@ fn load_dictionary() -> Vec<String> {
     let mut dict = vec![];
 
     // Put each line of dictionary.txt into the vector
-    let f = File::open("passwords.txt").unwrap();
-    let file = BufReader::new(&f);
+    let f: File = File::open("passwords.txt").unwrap();
+    let file = BufReader::new(f);
     for line in file.lines() {
         let l = line.unwrap();
         dict.push(l);

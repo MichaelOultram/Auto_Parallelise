@@ -4,6 +4,9 @@ use parallel_stages::dependency_analysis::{DependencyTree, DependencyNode, StmtI
 pub struct Schedule<'a>(Vec<ScheduleTree<'a>>);
 impl<'a> Schedule<'a> {
     pub fn new(list: Vec<ScheduleTree<'a>>) -> Self {
+        // Sort list so return statement is last element in the list
+        let mut list = list;
+        list.sort_by(|a, b| b.get_highest_stmtid().partial_cmp(&a.get_highest_stmtid()).unwrap());
         Schedule(list)
     }
 
@@ -94,6 +97,28 @@ impl<'a> ScheduleTree<'a>{
         }
         synclines
     }
+
+    fn get_highest_stmtid(&self) -> Option<StmtID> {
+        match self {
+            &ScheduleTree::Node(_, ref tree) => Some(tree.node.get_stmtid()),
+            &ScheduleTree::Block(_, ref tree, ref schedule) => {
+                let mut mbest_stmtid = Some(tree.node.get_stmtid());
+                for subtree in schedule.list() {
+                    if let Some(subtree_stmtid) = subtree.get_highest_stmtid() {
+                        if let Some(best_stmtid) = mbest_stmtid {
+                            if subtree_stmtid > best_stmtid {
+                                mbest_stmtid = Some(subtree_stmtid);
+                            }
+                        } else {
+                            mbest_stmtid = Some(subtree_stmtid);
+                        }
+                    }
+                }
+                mbest_stmtid
+            },
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -157,7 +182,7 @@ pub fn create_schedule(deptree: &DependencyTree) -> Schedule {
     // Create multiple maximum spanning tree, but each node can only appear once
     maximum_spanning_trees(&mut schedule_trees, &mut dependent_nodes);
 
-    Schedule(schedule_trees)
+    Schedule::new(schedule_trees)
 }
 
 fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
