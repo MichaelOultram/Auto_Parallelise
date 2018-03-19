@@ -67,15 +67,15 @@ impl<'a> Schedule<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ScheduleTree<'a> {
     // Prerequisite dependencies, Current Statement + Children
-    Node(Vec<StmtID>, SpanningTree<'a>),
+    Node(Vec<(StmtID, Environment)>, SpanningTree<'a>),
     // Prerequisite dependencies, Current Statement + Children, Inner Block Schedule
-    Block(Vec<StmtID>, SpanningTree<'a>, Schedule<'a>),
+    Block(Vec<(StmtID, Environment)>, SpanningTree<'a>, Schedule<'a>),
     // Node to wait for the dependency
     SyncTo(StmtID, StmtID, Environment),
 }
 
 impl<'a> ScheduleTree<'a>{
-    fn new(prereqs: Vec<StmtID>, node: &'a DependencyNode) -> Self {
+    fn new(prereqs: Vec<(StmtID, Environment)>, node: &'a DependencyNode) -> Self {
         if prereqs.len() > 0 {
             eprintln!("Got a prereq: {:?}, for node {:?}", prereqs, node);
         }
@@ -92,7 +92,7 @@ impl<'a> ScheduleTree<'a>{
         }
     }
 
-    pub fn get_deps_mut(&mut self) -> Option<&mut Vec<StmtID>> {
+    pub fn get_deps_mut(&mut self) -> Option<&mut Vec<(StmtID, Environment)>> {
         match self {
             &mut ScheduleTree::Node(ref mut deps, _) |
             &mut ScheduleTree::Block(ref mut deps, _, _) => Some(deps),
@@ -251,7 +251,7 @@ impl<'a> SpanningTree<'a> {
         }
     }
 
-    fn add_child(&mut self, prereqs: Vec<StmtID>, node:&'a DependencyNode) {
+    fn add_child(&mut self, prereqs: Vec<(StmtID, Environment)>, node:&'a DependencyNode) {
         self.children.push(ScheduleTree::new(prereqs, node));
     }
 
@@ -358,8 +358,8 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                                     let mut sync_env = treeoutenv.clone();
                                     sync_env.remove_env(diff_env);
                                     eprintln!("sync_env: {:?}", sync_env);
-                                    tree_node.add_sync_to(node_stmtid, node.get_stmtid(), sync_env);
-                                    prereqs.push(node_stmtid);
+                                    tree_node.add_sync_to(node_stmtid, node.get_stmtid(), sync_env.clone());
+                                    prereqs.push((node_stmtid, sync_env));
                                 } else {
                                     panic!();
                                 }

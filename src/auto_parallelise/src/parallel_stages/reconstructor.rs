@@ -77,7 +77,7 @@ fn create_thread(cx: &mut ExtCtxt, lo: u32, hi: u32, thread_contents: Vec<Stmt>)
     (thread_name, thread_stmt)
 }
 
-fn envtuple(cx: &mut ExtCtxt, env: Environment) -> P<Expr> {
+fn envtuple(cx: &mut ExtCtxt, env: &Environment) -> P<Expr> {
     let mut tuple = quote_expr!(cx, ()).deref().clone();
     if let ExprKind::Tup(ref mut exprl) = tuple.node {
         for var in env.clone().into_iter() {
@@ -90,13 +90,19 @@ fn envtuple(cx: &mut ExtCtxt, env: Environment) -> P<Expr> {
     P(tuple)
 }
 
-fn syncline_env(synclines: &Vec<(StmtID, StmtID, &Environment)>, to_a: u32, to_b: u32, from_a: u32, from_b: u32) -> Environment {
-    for &((ta, tb), (fa, fb), env) in synclines {
-        if ta == to_a && tb == to_b && fa == from_a && fb == from_b {
-            return env.clone();
+fn syncline_name(stmtid1: &StmtID, stmtid2: &StmtID, env: &Environment) -> String {
+    let &(to_a, to_b) = stmtid1;
+    let &(from_a, from_b) = stmtid2;
+    let mut line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+    for path in env.clone().into_depstr() {
+        for (var, marks) in path {
+            line_name.push_str(&format!("_{}", var));
+            for mark in marks {
+                line_name.push_str(&format!("{}", mark));
+            }
         }
     }
-    panic!("Cannot find syncline ({}_{}_{}_{}) and so cannot return environment", to_a, to_b, from_a, from_b)
+    line_name
 }
 
 pub fn spawn_from_schedule<'a>(config: &Config, cx: &mut ExtCtxt, schedule: Schedule) -> Vec<Stmt> {
@@ -104,8 +110,8 @@ pub fn spawn_from_schedule<'a>(config: &Config, cx: &mut ExtCtxt, schedule: Sche
     let synclines = schedule.get_all_synclines();
     eprintln!("Synclines:\n{:?}\n", synclines);
     let mut stmts = vec![];
-    for ((to_a, to_b), (from_a, from_b), _) in synclines.clone() {
-        let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+    for (ref stmtid1, ref stmtid2, ref env) in synclines.clone() {
+        let line_name = syncline_name(stmtid1, stmtid2, env);
         let sx = Ident::from_str(&format!("{}_send", line_name));
         let rx = Ident::from_str(&format!("{}_receive", line_name));
         let stmt = quote_stmt!(cx, let ($sx, $rx) = std::sync::mpsc::channel()).unwrap();
@@ -221,11 +227,9 @@ fn spawn_from_schedule_helper<'a>(config: &Config, cx: &mut ExtCtxt, sch: &Vec<S
 
     for i in 0..sch.len() {
         if let ScheduleTree::SyncTo(ref stmtid1, ref stmtid2, ref env) = sch[i] {
-            let &(to_a, to_b) = stmtid1;
-            let &(from_a, from_b) = stmtid2;
-            let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+            let line_name = syncline_name(stmtid1, stmtid2, env);
             let sx = Ident::from_str(&format!("{}_send", line_name));
-            let envexpr = envtuple(cx, env.clone());
+            let envexpr = envtuple(cx, env);
             let prereq = quote_stmt!(cx, $sx.send($envexpr).unwrap();).unwrap();
             output.push(prereq);
         } else {
@@ -237,11 +241,10 @@ fn spawn_from_schedule_helper<'a>(config: &Config, cx: &mut ExtCtxt, sch: &Vec<S
                     eprintln!("{:?} paths: {:?}", spanning_tree.node.get_stmtid(), spanning_tree.node.get_env());
 
                     // Add prereqs
-                    let (from_a, from_b) = spanning_tree.node.get_stmtid();
-                    for &(to_a, to_b) in prereqs {
-                        let line_name = format!("syncline_{}_{}_{}_{}", to_a, to_b, from_a, from_b);
+                    let ref stmtid2 = spanning_tree.node.get_stmtid();
+                    for &(ref stmtid1, ref sync_env) in prereqs {
+                        let line_name = syncline_name(stmtid1, stmtid2, sync_env);
                         let rx = Ident::from_str(&format!("{}_receive", line_name));
-                        let sync_env = syncline_env(all_synclines, to_a, to_b, from_a, from_b);
                         let prereq = if sync_env.len() > 0 {
                             let envexpr = envtuple(cx, sync_env);
                             quote_stmt!(cx, let $envexpr = $rx.recv().unwrap();).unwrap()
@@ -454,6 +457,7 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                     forward_inenv.remove_env(a_env);
                     eprintln!("Possible FORLOOP Parallelisation: {:?}", forward_inenv);
                     let mut backward_inenv = vec![];
+                    let mut additional_synclines = vec![];
 
                     // Create a copy of inner_schedule as we might change our mind on for loop parallelisation
                     let mut adapted_inner_schedule = inner_schedule.clone();
@@ -471,9 +475,10 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                             for var in env.into_iter() {
                                 if forward_inenv.contains(&var) {
                                     // Found first use of var: add a dependency syncline
-                                    forward_inenv.remove_env(Environment::new(vec![var.clone()]));
+                                    let syncline_env = Environment::new(vec![var.clone()]);
+                                    forward_inenv.remove_env(syncline_env.clone());
                                     backward_inenv.push((var, tree.get_spanning_tree().unwrap().node.get_stmtid()));
-                                    tree.get_deps_mut().unwrap().push(stmtID!(exprstmt));
+                                    tree.get_deps_mut().unwrap().push((stmtID!(exprstmt), syncline_env));
                                 }
                             }
                         }
@@ -481,7 +486,7 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                     assert!(forward_inenv.len() == 0, format!("Did not consume all of forward_inenv: {:?}", forward_inenv));
 
                     // Start from bottom of subtree and add inenv as releasing
-                    adapted_inner_schedule.navigate_backward_avoid_exprblock(&mut backward_inenv, &|ref mut backward_inenv, tree| {
+                    adapted_inner_schedule.navigate_backward_avoid_exprblock(&mut (&mut backward_inenv, &mut additional_synclines), &|&mut (ref mut backward_inenv, ref mut additional_synclines), tree| {
                         let menv = if let Some(spanning_tree) = tree.get_spanning_tree() {
                             let &(ref env, _) = spanning_tree.node.get_env();
                             Some(env.clone())
@@ -499,8 +504,12 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
 
                                 if let Some(dep_stmtid) = mdep_stmtid {
                                     // Variable was found in backward_inenv: Add a SyncTo line
-                                    let syncline = ScheduleTree::SyncTo(stmtID!(exprstmt), *dep_stmtid, Environment::new(vec![var.clone()]));
-                                    tree.get_spanning_tree_mut().unwrap().children.push(syncline);
+                                    let from = stmtID!(exprstmt);
+                                    let to = *dep_stmtid;
+                                    let syncline_env = Environment::new(vec![var.clone()]);
+                                    additional_synclines.push((from, to, syncline_env.clone()));
+                                    let syncline = ScheduleTree::SyncTo(from, to, syncline_env);
+                                    tree.get_spanning_tree_mut().unwrap().children.insert(0,syncline);
                                 }
                             }
                             // Remove from backward_inenv as we only need to find the var once
@@ -515,8 +524,19 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                     assert!(backward_inenv.len() == 0, format!("Did not consume all of backward_inenv: {:?}", backward_inenv));
 
                     // TODO: If a dependency is first line, and release is last line, do not parallelise (not worth it)
-                    // TODO: Otherwise, create a block out of new inner_schedule
+
+                    // Create a block out of new inner_schedule
+                    let mut adapted_all_synclines = adapted_inner_schedule.get_all_synclines();
+                    let mut adapted_inner_blocks_stmts = vec![];
+                    for inner_schedule_tree in adapted_inner_schedule.list() {
+                        let inner_schedule: Vec<ScheduleTree<'a>> = vec![inner_schedule_tree.clone()];
+                        let mut inner_block_stmt = spawn_from_schedule_helper(config, cx, &inner_schedule, &adapted_all_synclines);
+                        adapted_inner_blocks_stmts.append(&mut inner_block_stmt);
+                    }
+                    let mut adapted_inner_blocks = unwrap_stmts_to_blocks(&adapted_inner_blocks_stmts);
+
                     // TODO: Add some code before the loop, at the beginning of each iteration, and at the end to deal with synclines between iterations
+
                     // TODO: Return as a statement
                     // TODO: Pray it works
                     // Special Case: Return early
