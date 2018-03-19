@@ -9,6 +9,8 @@ use self::dependency_analysis::{Environment, PathName, StmtID, DependencyNode};
 use self::scheduler::{Schedule, ScheduleTree};
 use plugin::shared_state::Config;
 
+use serde_json;
+
 pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>, stmtid: Option<StmtID>) -> Block {
     let block = quote_block!(cx, {});
     let span = if let Some((lo, hi)) = stmtid {
@@ -451,14 +453,14 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                     let a_env = deconstructor::check_pattern(&mut vec![], &a.deref().node);
                     forward_inenv.remove_env(a_env);
                     eprintln!("Possible FORLOOP Parallelisation: {:?}", forward_inenv);
-                    let mut backwards_inenv = forward_inenv.clone();
+                    let mut backward_inenv = vec![];
 
                     // Create a copy of inner_schedule as we might change our mind on for loop parallelisation
                     let mut adapted_inner_schedule = inner_schedule.clone();
 
                     // Start from top of subtree and add inenv as dependencies
                     // Do not enter ExprBlocks as they are not guarenteed to be run
-                    adapted_inner_schedule.navigate_forward_avoid_exprblock(&mut forward_inenv, &|inenv, tree| {
+                    adapted_inner_schedule.navigate_forward_avoid_exprblock(&mut (&mut forward_inenv, &mut backward_inenv), &|&mut (ref mut forward_inenv, ref mut backward_inenv), tree| {
                         let menv = if let Some(spanning_tree) = tree.get_spanning_tree() {
                             let &(ref env, _) = spanning_tree.node.get_env();
                             Some(env.clone())
@@ -467,18 +469,51 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                         };
                         if let Some(env) = menv {
                             for var in env.into_iter() {
-                                if inenv.contains(&var) {
+                                if forward_inenv.contains(&var) {
                                     // Found first use of var: add a dependency syncline
-                                    inenv.remove_env(Environment::new(vec![var]));
-                                    let deps = tree.get_deps_mut().unwrap();
-                                    deps.push(stmtID!(exprstmt));
+                                    forward_inenv.remove_env(Environment::new(vec![var.clone()]));
+                                    backward_inenv.push((var, tree.get_spanning_tree().unwrap().node.get_stmtid()));
+                                    tree.get_deps_mut().unwrap().push(stmtID!(exprstmt));
                                 }
                             }
                         }
                     });
                     assert!(forward_inenv.len() == 0, format!("Did not consume all of forward_inenv: {:?}", forward_inenv));
 
-                    // TODO: Start from bottom of subtree and add inenv as releasing
+                    // Start from bottom of subtree and add inenv as releasing
+                    adapted_inner_schedule.navigate_backward_avoid_exprblock(&mut backward_inenv, &|ref mut backward_inenv, tree| {
+                        let menv = if let Some(spanning_tree) = tree.get_spanning_tree() {
+                            let &(ref env, _) = spanning_tree.node.get_env();
+                            Some(env.clone())
+                        } else {
+                            None
+                        };
+                        if let Some(ref env) = menv {
+                            for ref var in env.clone().into_iter() {
+                                let mut mdep_stmtid = None;
+                                for &(ref this_var, ref this_dep_stmtid) in backward_inenv.iter() {
+                                    if Environment::new(vec![var.clone()]).contains(this_var) {
+                                        mdep_stmtid = Some(this_dep_stmtid);
+                                    }
+                                }
+
+                                if let Some(dep_stmtid) = mdep_stmtid {
+                                    // Variable was found in backward_inenv: Add a SyncTo line
+                                    let syncline = ScheduleTree::SyncTo(stmtID!(exprstmt), *dep_stmtid, Environment::new(vec![var.clone()]));
+                                    tree.get_spanning_tree_mut().unwrap().children.push(syncline);
+                                }
+                            }
+                            // Remove from backward_inenv as we only need to find the var once
+                            backward_inenv.retain(|&(ref elem, _)| !env.contains(elem));
+                        }
+                    });
+                    let adapted_inner_schedule_json = match serde_json::to_string_pretty(&adapted_inner_schedule) {
+                        Ok(obj) => obj,
+                        Err(why) => panic!("Unable to convert AutoParallelise to JSON: {}", why),
+                    };
+                    eprintln!("Adpated_Inner_Schedule:\n{}\n", adapted_inner_schedule_json);
+                    assert!(backward_inenv.len() == 0, format!("Did not consume all of backward_inenv: {:?}", backward_inenv));
+
                     // TODO: If a dependency is first line, and release is last line, do not parallelise (not worth it)
                     // TODO: Otherwise, create a block out of new inner_schedule
                     // TODO: Add some code before the loop, at the beginning of each iteration, and at the end to deal with synclines between iterations

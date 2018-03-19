@@ -54,6 +54,14 @@ impl<'a> Schedule<'a> {
             schtree.navigate_forward_avoid_exprblock(item, map);
         }
     }
+
+    pub fn navigate_backward_avoid_exprblock<M, I>(&mut self, item: &mut I, map: &M)
+    where M: Fn(&mut I, &mut ScheduleTree<'a>) {
+        let schvec = &mut(self.0);
+        for id in (0..schvec.len()).rev() {
+            schvec[id].navigate_backward_avoid_exprblock(item, map);
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -166,14 +174,16 @@ impl<'a> ScheduleTree<'a>{
 
     pub fn navigate_forward_avoid_exprblock<M, I>(&mut self, item: &mut I, map: &M)
     where M: Fn(&mut I, &mut ScheduleTree<'a>) {
-        map(item, self);
+        let mut do_map = true;
         if let &mut ScheduleTree::Block(_, ref tree, ref mut schedule) = self {
-            if let &DependencyNode::ExprBlock(_, _, _, _) = tree.node {
-                // Avoid navigating inner schedule
-            } else {
-                // Navigate inner schedule
+            if let &DependencyNode::Block(_, _, _, _) = tree.node {
+                // Navigate inner schedule but don't map
                 schedule.navigate_forward_avoid_exprblock(item, map);
+                do_map = false;
             }
+        }
+        if do_map {
+            map(item, self);
         }
         match self {
             &mut ScheduleTree::Node(_, ref mut tree) |
@@ -182,6 +192,29 @@ impl<'a> ScheduleTree<'a>{
                     subtree.navigate_forward_avoid_exprblock(item, map);
                 },
             _ => (),
+        }
+    }
+
+    pub fn navigate_backward_avoid_exprblock<M, I>(&mut self, item: &mut I, map: &M)
+    where M: Fn(&mut I, &mut ScheduleTree<'a>) {
+        match self {
+            &mut ScheduleTree::Node(_, ref mut tree) |
+            &mut ScheduleTree::Block(_, ref mut tree, _) =>
+                for ref mut subtree in &mut (tree.children) {
+                    subtree.navigate_backward_avoid_exprblock(item, map);
+                },
+            _ => (),
+        }
+        let mut do_map = true;
+        if let &mut ScheduleTree::Block(_, ref tree, ref mut schedule) = self {
+            if let &DependencyNode::Block(_, _, _, _) = tree.node {
+                // Navigate inner schedule but don't map
+                schedule.navigate_backward_avoid_exprblock(item, map);
+                do_map = false;
+            }
+        }
+        if do_map {
+            map(item, self);
         }
     }
 }
