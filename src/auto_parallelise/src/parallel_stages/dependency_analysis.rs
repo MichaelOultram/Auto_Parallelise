@@ -85,12 +85,12 @@ impl Environment {
                     }
                 }
                 if is_equal {
-                    eprintln!("contains: {:?} == {:?}", target_elem, elem);
+                    //eprintln!("contains: {:?} == {:?}", target_elem, elem);
                     return true;
                 }
             }
         }
-        eprintln!("contains: {:?} != {:?}", target_elem, self.0);
+        //eprintln!("contains: {:?} != {:?}", target_elem, self.0);
         false
     }
     pub fn len(&self) -> usize {self.0.len()}

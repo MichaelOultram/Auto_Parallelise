@@ -34,6 +34,26 @@ impl<'a> Schedule<'a> {
     pub fn list(&self) -> &Vec<ScheduleTree<'a>> {
         &self.0
     }
+
+    pub fn list_mut(&mut self) -> &mut Vec<ScheduleTree<'a>> {
+        &mut(self.0)
+    }
+
+    pub fn fold_map<F, I>(&mut self, item: I, fold_map: &F) -> I where
+    F: Fn(I, &mut ScheduleTree<'a>) -> I {
+        let mut item = item;
+        for schtree in &mut(self.0) {
+            item = schtree.fold_map(item, fold_map);
+        }
+        item
+    }
+
+    pub fn navigate_forward_avoid_exprblock<M, I>(&mut self, item: &mut I, map: &M)
+    where M: Fn(&mut I, &mut ScheduleTree<'a>) {
+        for schtree in &mut(self.0) {
+            schtree.navigate_forward_avoid_exprblock(item, map);
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -64,6 +84,13 @@ impl<'a> ScheduleTree<'a>{
         }
     }
 
+    pub fn get_deps_mut(&mut self) -> Option<&mut Vec<StmtID>> {
+        match self {
+            &mut ScheduleTree::Node(ref mut deps, _) |
+            &mut ScheduleTree::Block(ref mut deps, _, _) => Some(deps),
+            _ => None,
+        }
+    }
 
     pub fn get_spanning_tree(&self) -> Option<&SpanningTree<'a>> {
         match self {
@@ -117,6 +144,44 @@ impl<'a> ScheduleTree<'a>{
                 mbest_stmtid
             },
             _ => None,
+        }
+    }
+
+    fn fold_map<F, I>(&mut self, item: I, fold_map: &F) -> I where
+    F: Fn(I, &mut ScheduleTree<'a>) -> I {
+        let mut item = fold_map(item, self);
+        if let &mut ScheduleTree::Block(_, _, ref mut schedule) = self {
+            item = schedule.fold_map(item, fold_map);
+        }
+        match self {
+            &mut ScheduleTree::Node(_, ref mut tree) |
+            &mut ScheduleTree::Block(_, ref mut tree, _) =>
+                for ref mut subtree in &mut (tree.children) {
+                    item = subtree.fold_map(item, fold_map);
+                },
+            _ => (),
+        }
+        item
+    }
+
+    pub fn navigate_forward_avoid_exprblock<M, I>(&mut self, item: &mut I, map: &M)
+    where M: Fn(&mut I, &mut ScheduleTree<'a>) {
+        map(item, self);
+        if let &mut ScheduleTree::Block(_, ref tree, ref mut schedule) = self {
+            if let &DependencyNode::ExprBlock(_, _, _, _) = tree.node {
+                // Avoid navigating inner schedule
+            } else {
+                // Navigate inner schedule
+                schedule.navigate_forward_avoid_exprblock(item, map);
+            }
+        }
+        match self {
+            &mut ScheduleTree::Node(_, ref mut tree) |
+            &mut ScheduleTree::Block(_, ref mut tree, _) =>
+                for ref mut subtree in &mut (tree.children) {
+                    subtree.navigate_forward_avoid_exprblock(item, map);
+                },
+            _ => (),
         }
     }
 }

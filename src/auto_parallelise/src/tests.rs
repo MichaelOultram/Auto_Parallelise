@@ -32,7 +32,7 @@ fn compile(build_config: &Config, folder: &Path) -> String {
     build_config.save(config_path);
 
     // Compile first stage: Analysis
-    let stage1output = Command::new("cargo").arg("build")
+    let stage1output = Command::new("cargo").arg("build").arg("--release")
                                .current_dir(&folder)
                                .env("RUST_BACKTRACE", "full")
                                .output().expect("Unable to compile analysis stage");
@@ -40,7 +40,7 @@ fn compile(build_config: &Config, folder: &Path) -> String {
 
     // Compile second stage: Modification
     let stage2output = Command::new("cargo")
-                               .arg("build")
+                               .arg("build").arg("--release")
                                .current_dir(&folder)
                                .env("RUST_BACKTRACE", "full")
                                .output().expect("Unable to compile modification stage");
@@ -63,6 +63,7 @@ fn create_tmpfolder() -> String {
 fn run(path: &Path) -> String {
     let cmdoutput = Command::new("cargo")
             .arg("run")
+	    .arg("--release")
             .current_dir(&path)
             .output()
             .expect(&format!("Unable to run {}", path.display()));

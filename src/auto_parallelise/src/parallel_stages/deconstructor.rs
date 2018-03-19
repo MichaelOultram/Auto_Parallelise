@@ -18,7 +18,7 @@ fn empty_block(block: &Block) -> P<Block> {
 }
 
 fn read_path(path: &Path) -> Option<PathName> {
-    eprintln!("path_global: {}", path.is_global());
+    //eprintln!("path_global: {}", path.is_global());
     let mut output = vec![];
     for segment in &path.segments {
         output.push(segment.identifier);
@@ -38,7 +38,7 @@ fn read_path(path: &Path) -> Option<PathName> {
     if output.len() > 1 {
         None
     } else {
-        eprintln!("read_path: {} -> {:?} -> {}", pprust::path_to_string(path), output, pprust::path_to_string(&var_name));
+        //eprintln!("read_path: {} -> {:?} -> {}", pprust::path_to_string(path), output, pprust::path_to_string(&var_name));
         Some(output)
     }
 }
