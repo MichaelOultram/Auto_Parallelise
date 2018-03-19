@@ -9,15 +9,15 @@ use std::time::Instant;
 
 #[autoparallelise]
 fn hash(word: String) -> String {
-    let mut hash_word = word;
+    let mut hash_word: String = word;
     // Hash word using Sha256
     for _ in 0..10000 {
         let mut hasher = Sha256::new();
         hasher.input_str(&hash_word);
-        hash_word = hasher.result_str();
+        hash_word = String::from(hasher.result_str());
     }
 
-    return hash_word;
+    hash_word
 }
 
 #[autoparallelise]

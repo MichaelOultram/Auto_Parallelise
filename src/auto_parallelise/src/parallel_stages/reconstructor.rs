@@ -457,6 +457,7 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                     forward_inenv.remove_env(a_env);
                     eprintln!("Possible FORLOOP Parallelisation: {:?}", forward_inenv);
                     let mut backward_inenv = vec![];
+                    let mut return_inenv = forward_inenv.clone();
                     let mut additional_synclines = vec![];
 
                     // Create a copy of inner_schedule as we might change our mind on for loop parallelisation
@@ -525,7 +526,45 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
 
                     // TODO: If a dependency is first line, and release is last line, do not parallelise (not worth it)
 
-                    // Create a block out of new inner_schedule
+                    // Add some code before the loop, at the beginning of each iteration, and at the end to deal with synclines between iterations
+                    let mut start_stmts = vec![];
+                    let mut iteration_stmts = vec![];
+                    let mut send_stmts = vec![];
+                    let mut collection_stmts = vec![];
+                    for &(ref stmtid1, ref stmtid2, ref env) in &additional_synclines {
+                        let line_name = syncline_name(stmtid1, stmtid2, env);
+                        // Start
+                        let sx0 = Ident::from_str(&format!("{}_send_0", line_name));
+                        let rx0 = Ident::from_str(&format!("{}_receive_0", line_name));
+                        let rxi = Ident::from_str(&format!("{}_receive_i", line_name));
+                        start_stmts.push(quote_stmt!(cx, let ($sx0, $rx0) = std::sync::mpsc::channel();).unwrap());
+                        start_stmts.push(quote_stmt!(cx, let mut $rxi = $rx0;).unwrap());
+                        // Iteration
+                        let sx = Ident::from_str(&format!("{}_send", line_name));
+                        let rx = Ident::from_str(&format!("{}_receive", line_name));
+                        let rxn = Ident::from_str(&format!("{}_receive_new", line_name));
+                        iteration_stmts.push(quote_stmt!(cx, let ($sx, $rxn) = std::sync::mpsc::channel();).unwrap());
+                        iteration_stmts.push(quote_stmt!(cx, let $rx = $rxi;).unwrap());
+                        iteration_stmts.push(quote_stmt!(cx, $rxi = $rxn;).unwrap());
+                        // Send
+                        let send_stmt = if env.len() > 0 {
+                            let envexpr = envtuple(cx, env);
+                            quote_stmt!(cx, $sx0.send($envexpr).unwrap();).unwrap()
+                        } else {
+                            quote_stmt!(cx, $sx0.send(()).unwrap();).unwrap()
+                        };
+                        send_stmts.push(send_stmt);
+                        // Collection
+                        let collection_stmt = if env.len() > 0 {
+                            let envexpr = envtuple(cx, env);
+                            quote_stmt!(cx, let $envexpr = $rxi.recv().unwrap();).unwrap()
+                        } else {
+                            quote_stmt!(cx, $rxi.recv().unwrap();).unwrap()
+                        };
+                        collection_stmts.push(collection_stmt);
+                    }
+
+                    // Create a new thread block out of new inner_schedule
                     let mut adapted_all_synclines = adapted_inner_schedule.get_all_synclines();
                     let mut adapted_inner_blocks_stmts = vec![];
                     for inner_schedule_tree in adapted_inner_schedule.list() {
@@ -533,13 +572,43 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                         let mut inner_block_stmt = spawn_from_schedule_helper(config, cx, &inner_schedule, &adapted_all_synclines);
                         adapted_inner_blocks_stmts.append(&mut inner_block_stmt);
                     }
-                    let mut adapted_inner_blocks = unwrap_stmts_to_blocks(&adapted_inner_blocks_stmts);
+                    let adapted_inner_block = create_block(cx, adapted_inner_blocks_stmts, None);
+                    let thread_block = quote_stmt!(cx, ::std::thread::spawn(move || $adapted_inner_block);).unwrap();
+                    iteration_stmts.push(thread_block);
+                    iteration_stmts.push(quote_stmt!(cx, ()).unwrap());
 
-                    // TODO: Add some code before the loop, at the beginning of each iteration, and at the end to deal with synclines between iterations
+                    // Create block out of iteration_stmts
+                    let iteration_block = create_block(cx, iteration_stmts, None);
 
-                    // TODO: Return as a statement
-                    // TODO: Pray it works
+                    // Reconstruct for loop with new block
+                    let for_loop_exprnode = ExprKind::ForLoop(a.clone(), b.clone(), P(iteration_block.clone()), c.clone());
+                    let mut for_loop_expr = expr.deref().clone();
+                    for_loop_expr.node = for_loop_exprnode;
+                    let for_loop_expr = P(for_loop_expr);
+                    let for_loop_stmt = quote_stmt!(cx, $for_loop_expr).unwrap();
+
+                    // Construct a block containing start, for_loop, end stmts
+                    let mut start_end_stmts = vec![];
+                    start_end_stmts.append(&mut start_stmts);
+                    start_end_stmts.push(for_loop_stmt);
+                    start_end_stmts.append(&mut send_stmts);
+                    start_end_stmts.append(&mut collection_stmts);
+                    if return_inenv.len() > 0 {
+                        let envexpr = envtuple(cx, &return_inenv);
+                        start_end_stmts.push(quote_stmt!(cx, $envexpr).unwrap());
+                    }
+                    let start_end_block = create_block(cx, start_end_stmts, None);
+
+                    // Combine start_end_block with a let statement
+                    let stmt = if return_inenv.len() > 0 {
+                        let envexpr = envtuple(cx, &return_inenv);
+                        quote_stmt!(cx, let $envexpr = $start_end_block;).unwrap()
+                    } else {
+                        quote_stmt!(cx, $start_end_block;).unwrap()
+                    };
+
                     // Special Case: Return early
+                    return stmt;
                 }
             }
             ExprKind::ForLoop(a.clone(), b.clone(), P(exprblock), c.clone())
