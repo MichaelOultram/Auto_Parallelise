@@ -1,0 +1,9 @@
+[package]
+name = "password-cracker-parallel"
+version = "0.1.0"
+authors = ["Michael Oultram <michael@oultr.am>"]
+
+[dependencies]
+rust-crypto = "0.2.36"
+num_cpus = "*"
+time = "*"
