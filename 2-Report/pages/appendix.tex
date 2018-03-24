@@ -3,12 +3,8 @@
 \todo{Write section}
 
 \section{Running the Code}
-Install rustup: \\
-\texttt{curl https://sh.rustup.rs -sSf | sh} \\
-
-Install rustc 1.25.0-nightly (0c6091fbd 2018-02-04) compiler: \\
-\texttt{rustup install nightly-2018-03-05} \\
-\texttt{rustup default nightly-2018-03-05} \\
+Install rustup and rustc 1.25.0-nightly (0c6091fbd 2018-02-04) compiler: \\
+\texttt{curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2018-03-05} \\
 
 Verify the version is correct using: \\
 \texttt{rustc --version} \\
@@ -17,7 +13,7 @@ Create a new crate and write sequential code: \\
 \texttt{cargo init} \\
 
 Under \texttt{[dependencies]} in \texttt{Cargo.toml}, add: \\
-\texttt{auto\_parallelise = \{ version = "0.1.0", git = "https://github.com/MichaelOultram/FYP/", branch = "release" \}} \\
+\texttt{auto\_parallelise=\{version="*", git="https://github.com/MichaelOultram/Auto\_Parallelise/"\}} \\
 
 At the top of your \texttt{lib.rs} or \texttt{main.rs} file, add: \\
 \texttt{\#![feature(plugin)]} \\
@@ -26,10 +22,13 @@ At the top of your \texttt{lib.rs} or \texttt{main.rs} file, add: \\
 At the top of every function, add: \\
 \texttt{\#[autoparallelise]} \\
 
-Compile the code twice using (the first time will fail): \\
+Compile the code once to run the analysis stage: \\
 \texttt{cargo build --release} \\
 
-Run the parallelised code using: \\
+Normally you would compile the code again with the same command to apply the modifications but due to a bug in the rust nightly compiler ($\#46489$), this doesn't work. Instead you must pipe stdout into a file: \\
+\texttt{cargo build --release > parallel\_code.rs} \\
+
+Normally you would just run the parallelised code but due to the bug, you will need to create a new project and copy \texttt{parallel\_code.rs} along with any imports. Then you can: \\
 \texttt{cargo run --release}
 
 \section{References}
