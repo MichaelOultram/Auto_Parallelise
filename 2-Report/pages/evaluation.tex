@@ -1,11 +1,60 @@
 \chapter{Evaluation}
 % Analyse on expressions instead of statements.
 % Statements that contain a block should have not been split as this makes reconstruction very difficult.
+\todo{Rewrite this entire paragraph.} Evaluating the success of my solution is difficult. My implemented solution only works for some examples, and its focus is on parallelising as much as possible, not necessarily getting a faster program. Also, many research papers in the field compare their speedup to LLVM, but rust (like many new langauges) uses LLVM itself. Making a pure comparison between the two is impossible, and so my result may be skewed. 
 
-\section{Successful Sequential Programs Parallelised}
+
+\section{Sequential Programs Parallelised}
 \subsection{Simple Example}
+
+\begin{code}
+    \inputcode{simple-example/main.rs}{}{}
+    \caption{A simple example program}
+\end{code}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/simple-example/main-dependency-analysis.png}
+    \caption{Dependency analysis graph of the simple example}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/simple-example/main-schedule.png}
+    \caption{Schedule of the simple example}
+\end{figure}
 
 \subsection{Password Cracker}
 
-\section{Failed Sequential Programs Parallelised}
+\begin{code}
+    \inputcode{password-cracker/main.rs}{27}{37}
+    \caption{Hash function of the password cracker program}
+\end{code}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{img/password-cracker/hash-dependency-analysis.png}
+    \caption{Dependency analysis graph of the hash function from the password cracker program}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{img/password-cracker/hash-schedule.png}
+    \caption{Schedule of the hash function from the password cracker program}
+\end{figure}
+
+\begin{code}
+    \inputcode{password-cracker/main.rs}{39}{`57}
+    \caption{Main method of the password cracker program}
+\end{code}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{img/password-cracker/main-dependency-analysis.png}
+    \caption{Dependency analysis graph of the main method from the password cracker program}
+\end{figure}
+
+
+
+\section{Limitations/Improvements}
 My implementation to the problem does not work for all sequential programs.

@@ -35,6 +35,20 @@ Each statement is analysed individually to provide a list of variables that the 
 
 
 \section{Modification Stage}
+% Takes the DependencyTree of a function with all relative dependencies added.
+% Converts the relative dependencies into StmtIDs
+% Maximum Spanning Tree:
+% 	Looks for any fully independent statements and starts a new ScheduleTree for each of them
+% 	while remaining_nodes:
+%		For all remaining nodes:
+%			if the node has all it's dependencies on the tree already
+%				find dependency node with maximum performance value (+ all dependent nodes on tree)
+%				add node to tree here (with a preresquite of all the other dependencies)
+%				add synclines onto the other dependency nodes so that all dependencies will be met
+% Inside a block, a new Schedule is created
+
+% Performance Metric:
+% Currently just a fixed number 1
 The dependency tree provided by the analysis stage shows what statements can be run in parallel. Some of these statements have multiple dependencies, all of which must be met before the statement is run. Each of these dependencies could be in a separate thread, and so some synchronisation technique is needed. The dependency tree is converted into a schedule tree so that we know which statements are run in which threads, and where/when synchronisation is required between threads.
 
 \begin{algorithm}[H]

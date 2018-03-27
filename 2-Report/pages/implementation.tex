@@ -1,23 +1,19 @@
 \chapter{Implementation}
 \label{chapter:Implementation}
-\todo{Explain rust compiler plugin types. Why we compile twice, etc.}
-\todo{Justify all decisions. Explain alternatives considered/implemented and why the design changed}
+%\todo{Justify all decisions. Explain alternatives considered/implemented and why the design changed}
 
-This chapter looks at how the design was implemented in practice and the design decisions that had to be adapted due to unforeseen complexities. \todo{pad}
+This chapter looks at how the design was implemented in practice and the design decisions that had to be adapted due to unforeseen complexities. Each design change is justified with an example of why the original design fails, and alternatives that were considered.
 
-There was three choices on how I could implement the design: directly modifying the rust compiler source code and recompiling the compiler; using the rust compiler plugin system to modify the abstract syntax tree or writing a source to source translation from scratch. Modifying the rust compiler would give me the flexibility to change any part of the compiler that I needed but it would make seeing my individual contributions difficult. Also, the compiler itself is very large and complex; it would take a while to compile from a clean state. Using a rust compiler plugin would give me less access, but I would only need to compile my plugin. The complexity of the compiler is still there with this option. Writing a source to source translation system from scratch would allow me to avoid touching the rust compiler and it's complexity. In return, I would have to write code to extract the abstract syntax tree from a source file. I would have to model the ownership/borrowing information to detect when parallelisms properly. From all these choices, I decided to write a rust compiler plugin as it provides all the ownership information is already accessibly. This option will require me to use the full abstract syntax tree; the other options had the possibility of using the less verbose high-level intermediate representation (basically syntax sugar free rust code).
+\section{How to implement the design}
+There was three choices on how I could implement the design: directly modifying the rust compiler source code and recompiling the compiler; using the rust compiler plugin system to modify the abstract syntax tree (AST) or writing a source to source translation from scratch. Modifying the rust compiler would give me the flexibility to change any part of the compiler that I needed but it would make seeing my individual contributions very difficult. Also, the compiler itself is very large and complex; it would take a while to compile from a clean state. Using a rust compiler plugin would give me less access, but I would only need to compile my plugin. The complexity of the compiler is still there with this option. Writing a source to source translation system from scratch would allow me to avoid touching the rust compiler and it's complexity. In return, I would have to write code to extract the AST from a source file. I would have to model the ownership/borrowing information to detect when parallelisms properly. From all these choices, I decided to write a rust compiler plugin as it provides all the ownership information is already accessibly. This option requires me to use the full AST; the other options had the possibility of using the less verbose high-level intermediate representation (HIR).
 
+The rust compiler allows for plugins of different types. The two types of plugins of interest are Syntax Extension plugins and Linter plugins. Syntax Extension plugins are executed first in the rust compiler pipeline, and are generally used to convert macros into code. Linter plugins are run at a later stage, and are generally used to check code style to produce warnings (like unused variable). It has the complete AST of the code with all the macros expanded. All the information required about dependencies is accessible inside a linter plugin. However, once the rust compiler gets to the linter plugins, the AST can no longer be modified. Syntax extension plugins allow modification of the AST, but they do not have macros expanded. Some dependencies could be missed by trying to analyse the AST at this stage. The solution I decided on was to compile the program twice. On the first compile, the syntax extension does nothing and the linter plugin examines the expanded code. The dependency information gathered is saved into a file for the next compile. On the second compile, the syntax extension plugin reads the file to get all the dependency information. Any parallelisable parts are then modified to be run in parallel.
 
-The rust compiler allows for plugins of different types. The two types of plugins used are Syntax Extension plugin and a Linter Plugin. Syntax Extension plugins are run first, and are generally used to convert macros into code. I will use a syntax extension to change the entire body of a function from sequential code into parallelised code. Linter plugins run after all the syntax extension plugins, and are generally used to check code style to produce warnings (like unused variable).
+To use the rust plugin system, the source code will need to be annotated which provides the plugins with access to that element in the AST. Each function of the sequential source code should be annotated with \texttt{\#[autoparallelise]}. This annotation does not provide any information about the parallelisability of the source code and is purely just a workaround for the rust plugin system.
 
-The linter plugin will have the abstract syntax tree of the code with all the macros expanded. This stage has all the information required about dependencies. However, once the rust compiler gets to the linter plugins, I can no longer edit the code (without recompiling the compiler). The solution I decided on was to compile the program twice. On the first compile, the syntax extension does nothing and the linter plugin examines the expanded code. The dependency information gathered is saved into a file for the next compile. On the second compile, the syntax extension plugin reads the file to get all the dependency information. Any parallelisable parts are modified to be run in parallel.
-
-The rust plugin system requires an annotation to be able to access that element of the code. Each function of the sequential source code should be annotated with \texttt{\#[autoparallelise]}. The AST is described by three types of structs: Block, Stmt and Expr. A block contains a list of statements, and each statement is a combination of expressions. Macros can take arguments and are transformed into code. This transformation happens in the compiler after executing all the syntax extension plugins. Each function is evaluated separately.
+\todo{Move this paragraph somewhere.} The AST is described by three types of structs: Block, Stmt and Expr. A block contains a list of statements, and each statement is a combination of expressions. Macros can take arguments and are transformed into code. This transformation happens in the compiler after executing all the syntax extension plugins. Each function is evaluated separately.
 
 \section{Dependency Analysis}
-The dependency analysis stage is split over two compiles. The first compile uses the linter plugin, and the second uses the syntax extension plugin.
-
-\subsection{Linter Plugin}
 % Analysis Stage
 %==================
 % Convert from Rust AST to our representation of Blocks and Statements
@@ -33,22 +29,32 @@ The dependency analysis stage is split over two compiles. The first compile uses
 % StmtID is the span.lo().0 and span.hi().0 which refers to the byte in the original source code.
 
 % All the EncodedDependencyTree's and function meta data is saved into a JSON file
+\todo{Deconstruction. Extracting variables (path) and let/match statements (patterns).}
 The block of the sequential function is examined statement by statement. Each statement is converted into our representation of the AST so that information can be stored about the dependencies. The extra information includes two environments containing which variables the statement requires and produces.
 
 Once all the statements for a function are converted into our representation, the dependency environment need to be matched up to statement ids. Each converted statement is looked at in turn, starting from the beginning of the function. The algorithm looks backwards from the current point in the function to find what statements produce the variables in the requires environment. The statement ID relative to the block of all of the dependencies is stored as part of the converted statement.
 
+
+\subsection{Nodes and Blocks}
+\todo{Nodes and Blocks $\to$ ExprBlock}
 It is possible for a block to be inside a block by being represented as a Statement. Blocks need to be evaluated using the same method as explained in the previous paragraph. A block statement is represented as a list of converted statements, as well as the blocks own environment and dependency ids. It is also possible for a new block to be part of another expression (i.e. for loops). In this case, this is stored as an ExprBlock with the statement that the block originates from, a subtree containing a Block statement (there could be more than one block) and the environments/dependency ids.
 
-Once all functions have been analysed, the DependencyTree is converted into an EncodedDependencyTree. The code part of the converted statement is converted into a statement id. The statement ID is represented as a pair of numbers \texttt{(span.lo().0, span.hi().0)}, which relate to the byte location of the source code. This will remain consistent between compile runs, whereas the NodeID does not. All EncodedDependencyTrees and function meta data is stored into a JSON file using \texttt{serde\_json}.
+
+\subsection{Environments}
+\todo{Two environments so two lets with the same variable are not dependent}
 
 
-\subsection{Syntax Extension Plugin}
+\section{Modification Stage}
 % Modification Stage
 %==================
 % First part of analysis stage is repeated for the modification stage.
 % Modification stage does not have marcos expanded, and so some dependencies would be missed.
 % The EncodedDependencyTree is loaded from the JSON file which should include the dependency of the expanded macros.
 % The EncodedDependencyTree is merged with the DependencyTree from the Modification stage so that unexpanded macros have dependencies.
+\subsection{Shared File}
+\todo{Shared file between stages. StatementID that is consistent between compiles. Tried merging dependencies then replacing dependencies}
+
+Once all functions have been analysed, the DependencyTree is converted into an EncodedDependencyTree. The code part of the converted statement is converted into a statement id. The statement ID is represented as a pair of numbers \texttt{(span.lo().0, span.hi().0)}, which relate to the byte location of the source code. This will remain consistent between compile runs, whereas the NodeID does not. All EncodedDependencyTrees and function meta data is stored into a JSON file using \texttt{serde\_json}.
 
 The plugin detects the JSON file and loads it. This is stored as a shared state between different functions.
 
@@ -56,40 +62,22 @@ The first part of the dependency analysis is repeated for the syntax extension p
 
 The dependencies are merged function by function from the shared state so that unexpanded macros get the missing dependencies. The dependencies of Statements that have the same StmtID are merged together.
 
-\section{Scheduler}
-% Takes the DependencyTree of a function with all relative dependencies added.
-% Converts the relative dependencies into StmtIDs
-% Maximum Spanning Tree:
-% 	Looks for any fully independent statements and starts a new ScheduleTree for each of them
-% 	while remaining_nodes:
-%		For all remaining nodes:
-%			if the node has all it's dependencies on the tree already
-%				find dependency node with maximum performance value (+ all dependent nodes on tree)
-%				add node to tree here (with a preresquite of all the other dependencies)
-%				add synclines onto the other dependency nodes so that all dependencies will be met
-% Inside a block, a new Schedule is created
 
-% Performance Metric:
-% Currently just a fixed number 1
 
+\subsection{Scheduler}
 Once the dependency analysis is complete, the scheduler takes the dependency tree and works out a schedule. All relative dependency ids are converted into StmtIDs. The idea around the scheduling algorithm is Maximum Spanning Trees. All statements that have no dependencies can be started at the very beginning. All remaining statements wait for all their dependencies to be put into the schedule. Once all the dependencies for a statement are added, this statement is selected as the next one to add to the schedule. As each statement requires all of its dependencies before it can be executed, it should be scheduled to run after the slowest dependency. This should minimise the amount of time that the statement has to wait for its dependencies. Synclines are created for all the remaining dependencies so that all dependencies are met. Each block gets its own schedule.
 
-\section{Reconstructor}
+\todo{Add environment to syncline}
+
+\subsection{Reconstructor}
+\todo{Reconstructor. Struggle of creating new statements with specific StatementIDs. Compiler bug that requires me to recompile for a third time}
+\todo{Return types}
 All parts of the reconstructor algorithm takes part in the second compile.
 % Takes the schedule of a function and converts it back into real (parallelised) code
 
 
-\todo{Remove}
-\section{Sample code section}
 
-Here is some text above
-
-%\begin{code}
-%    % Sample code
-%    \inputcode{autoparallelise/src/syntax_extension.rs}{50}{60}
-%    \caption{}
-%\end{code}
-
+\begin{comment}
 \begin{code}
     % FnKind Enum
     \inputcode{rust/src/libsyntax/visit.rs}{34}{43}
@@ -139,5 +127,4 @@ a = {
     \inputcode{rust/src/libsyntax_pos/lib.rs}{143}{149}
     \caption{}
 \end{code}
-
-Here is some text below \autoref{code:removeme}
+\end{comment}
