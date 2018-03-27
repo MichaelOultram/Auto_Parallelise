@@ -57,3 +57,5 @@
 \newcommand{\inputcode}[3]{
     \inputminted[firstline=#2, lastline=#3, label=\detokenize{#1}]{rust}{#1}\vspace{-1.3em}
 }
+
+\newcommand{\rustc}[1]{\hyperref[lst:rustc-#1]{\texttt{#1}}}

@@ -11,8 +11,6 @@ The rust compiler allows for plugins of different types. The two types of plugin
 
 To use the rust plugin system, the source code will need to be annotated which provides the plugins with access to that element in the AST. Each function of the sequential source code should be annotated with \texttt{\#[autoparallelise]}. This annotation does not provide any information about the parallelisability of the source code and is purely just a workaround for the rust plugin system.
 
-\todo{Move this paragraph somewhere.} The AST is described by three types of structs: Block, Stmt and Expr. A block contains a list of statements, and each statement is a combination of expressions. Macros can take arguments and are transformed into code. This transformation happens in the compiler after executing all the syntax extension plugins. Each function is evaluated separately.
-
 \section{Dependency Analysis}
 % Analysis Stage
 %==================
@@ -29,20 +27,11 @@ To use the rust plugin system, the source code will need to be annotated which p
 % StmtID is the span.lo().0 and span.hi().0 which refers to the byte in the original source code.
 
 % All the EncodedDependencyTree's and function meta data is saved into a JSON file
-\todo{Deconstruction. Extracting variables (path) and let/match statements (patterns).}
-The block of the sequential function is examined statement by statement. Each statement is converted into our representation of the AST so that information can be stored about the dependencies. The extra information includes two environments containing which variables the statement requires and produces.
+In the design section of the report, the dependency analysis algorithm takes in a block and examines it statement by statement to extract out the variables that are used. Actually doing this in the compiler plugin required a lot more effort than it seems on the face of it. The compiler calls a function in the plugin for each annotated function. To get the \rustc{Block} struct out of this requires expanding the \rustc{FnKind} enum. A \rustc{Block} contains a list of statements (\rustc{Stmt}). The \rustc{Stmt} struct contains a \rustc{StmtKind} enum. This describes what kind of statement it is, either a local variable binding, an unexpanded macro, or an expression ending with or without a semicolon. For the variable binding, a \rustc{Local} struct is given which contains a \rustc{Path} representing the variable name. Some variables will be assigned a value at creation and this is represented as an \rustc{Expr} struct. Unexpanded macros contain some other types which represent the arguments to the macro, but I did not end up going any deeper into this. Statements which are expression with or without a semicolon will give an \rustc{Expr} struct. Similar to the \rustc{Stmt} struct, the \rustc{Expr} struct contains a \rustc{ExprKind} enum which represents the $39$ different types of expressions. Most of these options contain another \rustc{Expr}, but some contain other types like a \rustc{Pat} which is the second way a variable can be represented. Almost all of the different cases in \rustc{ExprKind} had to be dealt with to fully explore the tree and extract all the variables a statement uses (its environment).
 
-Once all the statements for a function are converted into our representation, the dependency environment need to be matched up to statement ids. Each converted statement is looked at in turn, starting from the beginning of the function. The algorithm looks backwards from the current point in the function to find what statements produce the variables in the requires environment. The statement ID relative to the block of all of the dependencies is stored as part of the converted statement.
+Each statement is converted into our representation of the AST so that information can be stored about the dependencies. The original design used two types, a expr to represent a single statement and a block to represent a list of exprs and blocks. This design does not deal a \rustc{ExprKind} which contains a \rustc{Block} properly (i.e. a for loop). My first idea was to split the \rustc{Stmt} into a expr and a block and set the block to depend on the expr. This seemed to work for the dependency analysis stage, but not for the reconstruction stage. It was difficult to distinguish which block is the contents of the \rustc{ExprKind} if an external block was also dependent on the expr. I created a third type called exprblock which contains one expr and a list of blocks (as if-else statements will require more than one block). Once all the statements for a function are converted into our representation, and each statement had an environment, then the environments could be matched up as described in Algorithm \ref{alg:dependency-analysis}. The statement ID stored is relative to the block of all of the dependencies.
 
-
-\subsection{Nodes and Blocks}
-\todo{Nodes and Blocks $\to$ ExprBlock}
-It is possible for a block to be inside a block by being represented as a Statement. Blocks need to be evaluated using the same method as explained in the previous paragraph. A block statement is represented as a list of converted statements, as well as the blocks own environment and dependency ids. It is also possible for a new block to be part of another expression (i.e. for loops). In this case, this is stored as an ExprBlock with the statement that the block originates from, a subtree containing a Block statement (there could be more than one block) and the environments/dependency ids.
-
-
-\subsection{Environments}
-\todo{Two environments so two lets with the same variable are not dependent}
-
+\todo{Two environments so two lets with the same variable are not dependent.} Originally only the dependency ids were going to be added to our representation of the AST, but I later realised that I should also store the environment. Later still I realised that just using one environment had a flaw which includes two environments containing which variables the statement requires and produces.
 
 \section{Modification Stage}
 % Modification Stage
@@ -75,34 +64,7 @@ Once the dependency analysis is complete, the scheduler takes the dependency tre
 All parts of the reconstructor algorithm takes part in the second compile.
 % Takes the schedule of a function and converts it back into real (parallelised) code
 
-
-
 \begin{comment}
-\begin{code}
-    % FnKind Enum
-    \inputcode{rust/src/libsyntax/visit.rs}{34}{43}
-    \caption{}
-\end{code}
-
-\begin{code}
-    % Block Struct
-    \inputcode{rust/src/libsyntax/ast.rs}{489}{497}
-    \caption{}
-\end{code}
-
-\begin{code}
-    % Stmt Struct
-    \inputcode{rust/src/libsyntax/ast.rs}{781}{785}
-    \caption{}
-\end{code}
-
-\begin{code}
-    % StmtKind enum
-    \inputcode{rust/src/libsyntax/ast.rs}{815}{828}
-    \caption{}
-\end{code}
-
-
 \begin{code}
 \begin{minted}{rust}
 let a; // Local without init
@@ -113,18 +75,5 @@ a = {
 }; // Semi
 \end{minted}
 \caption{Example showing different StmtKinds}
-\end{code}
-
-
-\begin{code}
-    % ExprKind enum
-    \inputcode{rust/src/libsyntax/ast.rs}{987}{1122}
-    \caption{}
-\end{code}
-
-\begin{code}
-    % SpanData Struct
-    \inputcode{rust/src/libsyntax_pos/lib.rs}{143}{149}
-    \caption{}
 \end{code}
 \end{comment}

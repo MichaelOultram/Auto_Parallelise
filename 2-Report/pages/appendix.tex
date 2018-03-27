@@ -1,4 +1,7 @@
 \chapter{Appendix}
+\section{References}
+\printbibliography[heading=none]
+
 \section{Submission File Structure}
 \todo{Write section}
 
@@ -25,15 +28,62 @@ At the top of every function, add: \\
 Compile the code once to run the analysis stage: \\
 \texttt{cargo build --release} \\
 
-Normally you would compile the code again with the same command to apply the modifications but due to a bug in the rust nightly compiler ($\#46489$), this doesn't work. Instead you must pipe stdout into a file: \\
+Normally you would compile the code again with the same command to apply the modifications but due to a bug in the rust nightly compiler (\href{https://github.com/rust-lang/rust/issues/46489}{$\#46489$}), this doesn't work. Instead you must pipe stdout into a file: \\
 \texttt{cargo build --release > parallel\_code.rs} \\
 
 Normally you would just run the parallelised code but due to the bug, you will need to create a new project and copy \texttt{parallel\_code.rs} along with any imports. Then you can: \\
 \texttt{cargo run --release}
 
-\section{References}
-\printbibliography[heading=none]
-
 %\section{Project Proposal and Scientific Paper}
 %\includepdf[pages=-]{../0-Proposal/main.pdf}
 %\includepdf[pages=-]{../1-Scientific-Paper//main.pdf}
+
+\section{Rust Compiler Types}
+\begin{code}
+    % FnKind Enum
+    \inputcode{rust/src/libsyntax/visit.rs}{34}{43}
+    \caption{\texttt{FnKind} enum}
+    \label{lst:rustc-FnKind}
+\end{code}
+
+\begin{code}
+    % Block Struct
+    \inputcode{rust/src/libsyntax/ast.rs}{489}{497}
+    \caption{\texttt{Block} struct}
+    \label{lst:rustc-Block}
+\end{code}
+
+\begin{code}
+    % Stmt Struct
+    \inputcode{rust/src/libsyntax/ast.rs}{781}{785}
+    \caption{\texttt{Stmt} struct}
+    \label{lst:rustc-Stmt}
+\end{code}
+
+\begin{code}
+    % StmtKind enum
+    \inputcode{rust/src/libsyntax/ast.rs}{815}{828}
+    \caption{\texttt{StmtKind} enum}
+    \label{lst:rustc-StmtKind}
+\end{code}
+
+\begin{code}
+    % Expr Struct
+    \inputcode{rust/src/libsyntax/ast.rs}{899}{904}
+    \caption{\texttt{Expr} struct}
+    \label{lst:rustc-Expr}
+\end{code}
+
+\begin{code}
+    % ExprKind enum
+    \inputcode{rust/src/libsyntax/ast.rs}{987}{1122}
+    \caption{\texttt{ExprKind} enum}
+    \label{lst:rustc-ExprKind}
+\end{code}
+
+\begin{code}
+    % SpanData Struct
+    \inputcode{rust/src/libsyntax_pos/lib.rs}{143}{149}
+    \caption{\texttt{SpanData} struct}
+    \label{lst:rustc-SpanData}
+\end{code}

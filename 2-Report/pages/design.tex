@@ -9,7 +9,7 @@ Parallelising compilers described in the literature (\autoref{sec:related-work})
 \section{Analysis Stage}
 \begin{algorithm}[H]
 \caption{Dependency Analysis Algorithm}
-\label{algorithm:dependency-analysis}
+\label{alg:dependency-analysis}
 \begin{algorithmic}[1]
     \Require $block$ as a list of Statements
     \State $envs = \{\}$
@@ -31,7 +31,7 @@ Parallelising compilers described in the literature (\autoref{sec:related-work})
 \end{algorithmic}
 \end{algorithm}
 
-Each statement is analysed individually to provide a list of variables that the statement accesses. This list describes the variable dependencies that the statement has, but it does not describe which statements must be executed before the current one for the program to remain correct. To get this information, the algorithm looks at each statement in turn. For each variable that it requires, it looks at the statements before it in the block in reverse order for that variable to be its list of variable dependencies. The first statement found containing this variable as a dependency is added as a statement dependency. Any variables that were not found above the current statement must be defined outside the current block, and so are added as the current blocks dependency. This algorithm is shown in Algorithm \autoref{algorithm:dependency-analysis}.
+Each statement is analysed individually to provide a list of variables that the statement accesses. This list describes the variable dependencies that the statement has, but it does not describe which statements must be executed before the current one for the program to remain correct. To get this information, the algorithm looks at each statement in turn. For each variable that it requires, it looks at the statements before it in the block in reverse order for that variable to be its list of variable dependencies. The first statement found containing this variable as a dependency is added as a statement dependency. Any variables that were not found above the current statement must be defined outside the current block, and so are added as the current blocks dependency. This algorithm is shown in Algorithm \autoref{alg:dependency-analysis}.
 
 
 \section{Modification Stage}
@@ -53,7 +53,7 @@ The dependency tree provided by the analysis stage shows what statements can be 
 
 \begin{algorithm}[H]
 \caption{Scheduling Algorithm}
-\label{algorithm:scheduling}
+\label{alg:scheduling}
 \begin{algorithmic}[1]
     \Require $block$ as a list of Statements
     \Require $envs$ as a list Statement Environments
@@ -81,4 +81,4 @@ The dependency tree provided by the analysis stage shows what statements can be 
 \end{algorithmic}
 \end{algorithm}
 
-The scheduling algorithm designed aims to run as much as possible in separate threads. It makes the naive assumption that threads have no overhead. To start of with, the algorithm looks for any statements with no dependencies. Each of these statements can be run in a separate thread. For all the remaining statements, the algorithm looks selects the set of statements that have all their dependencies in the schedule already. If the statement only has one dependency, then that statement is added directly after that dependency. If the statement has more than one, then the algorithm looks to see which dependency has the longest chain. The thought behind this is that this dependency should be the slowest, and so all the other dependencies should have been finished by this point. To make sure that there are no race conditions, a syncline is introduced from the other dependencies to just before the current statement. This algorithm is repeated until all the statements are in the schedule. Since there cannot be any cyclic dependencies due to the way that the dependency analysis algorithm was designed, this is guaranteed to terminate. This algorithm is shown in Algorithm \autoref{algorithm:scheduling}.
+The scheduling algorithm designed aims to run as much as possible in separate threads. It makes the naive assumption that threads have no overhead. To start of with, the algorithm looks for any statements with no dependencies. Each of these statements can be run in a separate thread. For all the remaining statements, the algorithm looks selects the set of statements that have all their dependencies in the schedule already. If the statement only has one dependency, then that statement is added directly after that dependency. If the statement has more than one, then the algorithm looks to see which dependency has the longest chain. The thought behind this is that this dependency should be the slowest, and so all the other dependencies should have been finished by this point. To make sure that there are no race conditions, a syncline is introduced from the other dependencies to just before the current statement. This algorithm is repeated until all the statements are in the schedule. Since there cannot be any cyclic dependencies due to the way that the dependency analysis algorithm was designed, this is guaranteed to terminate. This algorithm is shown in Algorithm \autoref{alg:scheduling}.
