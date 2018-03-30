@@ -2,11 +2,13 @@
 \label{sec:evaluation}
 % Analyse on expressions instead of statements.
 % Statements that contain a block should have not been split as this makes reconstruction very difficult.
-\todo{Rewrite this entire paragraph.} Evaluating the success of my solution is difficult. My implemented solution only works for some examples, and its focus is on parallelising as much as possible, not necessarily getting a faster program. Also, many research papers in the field compare their speedup to LLVM, but rust (like many new langauges) uses LLVM itself. Making a pure comparison between the two is impossible, and so my result may be skewed.
+Evaluating the success of my solution is difficult. My implemented solution only works for some examples, as only some features of the language are supported. It focus is on parallelising as much as possible, not necessarily on getting a faster program. \todo{Fact check this} Many research papers in the field compare their speedup to LLVM, but the rust compiler (like many languages) uses LLVM for the final stages of compilation. Optimisations from LLVM will be applied to both the sequential and parallel versions, and so my results may not be comparable to others.
 
+Two sequential programs were parallelised: a simple example and a password cracker. The dependency tree and schedule are analysed to check the validity of the parallelising compiler. A collection of automatically generated sequential programs were also parallelised and their output was compared with the sequential version to check that the parallelisms have not semantically changed the program. The amount of concurrent threads was recorded, as well as performance of the parallel version is compared with the sequential version to see if the parallelisms have any affect.
 
 \section{Sequential Programs Parallelised}
 \subsection{Simple Example}
+This simple example is intended as an easy example to understand how the parallelising compiler works. It consists of two independent variables, \texttt{a} and \texttt{b} which are printed together.
 
 \begin{code}
     \inputcode{simple-example/main.rs}{}{}
@@ -19,13 +21,21 @@
     \caption{Dependency analysis graph of the simple example}
 \end{figure}
 
+The dependency analysis graph clearly shows \texttt{a} and \texttt{b} do not need to be inter-weaved. It also shows that the \texttt{println!(``End of program");} is completely independent of the other print statement. This may not be intended by the programmer, but there is nothing inside the \texttt{println!} macro which states that they must be called in order (there is no variable linking the two print statements). This could be fixed by forcing external functions to be executed in order, even if there is no variable linking them together. This would reduce the number of parallelisms detected, but it would make the programs more compatible. Because this dependency is not detected, I sorted the outputs of both sequential and parallel programs so that the order does not matter when comparing outputs.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.6\textwidth]{img/simple-example/main-schedule.png}
     \caption{Schedule of the simple example}
 \end{figure}
 
+The scheduling algorithm split \texttt{a} and \texttt{b} into separate threads as well as the ``End of program" print statement. The print statement that prints \texttt{a} and \texttt{b} attached itself to the \texttt{a} thread. The \texttt{b} variable is sent along a syncline just before the print.
+
 \subsection{Password Cracker}
+The password cracker contains three functions: \texttt{loadDictionary()}, \texttt{hash()} and \texttt{main()}. The \texttt{loadDictionary()} is not analysed here as the parallelising compiler did not make any changes to this function. This program is on the limits of what my parallelising compiler can do in its current state. Some of the code is written specifically to get it to parallelise properly.
+
+\subsubsection{Hash Function}
+The hash function uses an external crate which implements SHA256. The word argument is iteratively hashed $1000$ times and then returned. Notice that \texttt{i} is set to decrease from $999$ to $0$ which does not have any impact on the loop. This has been added to disable the parallelising compiler from trying to parallelise this loop. Line $32$ has no dependencies and can be run in parallel. If it was computationally expensive to call \texttt{Sha256::new()} then it would make sense to run this statement of the loop in parallel. The rest of the statements depend on the previous iteration and so no speedup can be achieved here. Also note that \texttt{hash\_word} is borrowed on line $33$ which is not a \todo{is it borrowing, or the str type that breaks this?} fully supported feature of the parallelising compiler. For these reasons, I manually disabled the loop being parallelised in this case. If the performance analyse and borrowing features were implemented, the \texttt{.rev()} would not need to be added.
 
 \begin{code}
     \inputcode{password-cracker/main.rs}{27}{37}
@@ -38,14 +48,20 @@
     \caption{Dependency analysis graph of the hash function from the password cracker program}
 \end{figure}
 
+The dependency graph shows how the inner block is linear for one iteration. The reason that the loop cannot be parallelised effectively is that \texttt{hash\_word} is modified each iteration.
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{img/password-cracker/hash-schedule.png}
+    \includegraphics[width=0.6\textwidth]{img/password-cracker/hash-schedule.png}
     \caption{Schedule of the hash function from the password cracker program}
 \end{figure}
 
+The schedule shows how linear the iterative hash function is. The only thread separate thread that is spawned clones the word. The reason that the for loop is not inside the same thread is because the \texttt{hash\_word} dependency is inside the for loop. The condition on the for loop is independent and could be slow and so is parallelised. In reality, this will be much slower due to thread overhead.
+
+\subsubsection{Main Method}
+The main method loads the dictionary from a file into a list of strings. Each word in this list is hashed and compared with a password hash. Notice that the for loop is not interrupted when it finds the correct word, or even stored; it is just printed. A timing circuit is placed around the function to print how long it takes to find the password.
 \begin{code}
-    \inputcode{password-cracker/main.rs}{39}{`57}
+    \inputcode{password-cracker/main.rs}{39}{57}
     \caption{Main method of the password cracker program}
 \end{code}
 
@@ -55,7 +71,18 @@
     \caption{Dependency analysis graph of the main method from the password cracker program}
 \end{figure}
 
+As you can see from the dependency graph, the timing circuit is a completely independent program. This is probably not intended, and it is a similar problem to the \texttt{println!} problem. There is no real fix I can think of for this issue except hard coding the time crate to be dependent on everything (and everything dependent on it). I am not a fan of hard coding this, as there may be other functions in other crates which also have similar dependency requirements. I will just remove the timing circuit when comparing the outputs as the time will not be consistent between runs.
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{img/password-cracker/main-schedule.png}
+    \caption{Schedule of the main method from the password cracker program}
+\end{figure}
 
-\section{Limitations/Improvements}
-My implementation to the problem does not work for all sequential programs.
+\todo{Show parallelised for loop as a separate schedule}
+
+\subsection{Automatically Generated Sequential Programs}
+\todo{Write subsection}
+
+\section{Results}
+\todo{Include results from automated testing}

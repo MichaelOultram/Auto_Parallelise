@@ -1,10 +1,21 @@
 \chapter{Preamble}
+\section{Contents}
+\makeatletter
+\newcommand*{\toccontents}{\@starttoc{toc}}
+\makeatother
+\toccontents
+
 \section{Abstract}
 \todo{Write Abstract}
 
-All software for this project can be found at \url{https://github.com/MichaelOultram/Auto\_Parallelise}
+\begin{center}
+All software for this project can be found at \\
+\url{https://github.com/MichaelOultram/Auto\_Parallelise}
+\end{center}
 
+\begin{comment}
 \section{Acknowledgements}
 Rust Compiler (\url{https://github.com/rust-lang/rust})
 
 Serde (\url{https://serde.rs/}): used to convert rust objects into JSON and back again
+\end{comment}
