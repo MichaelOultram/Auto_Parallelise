@@ -79,10 +79,20 @@ As you can see from the dependency graph, the timing circuit is a completely ind
     \caption{Schedule of the main method from the password cracker program}
 \end{figure}
 
-\todo{Show parallelised for loop as a separate schedule}
+The schedule also shows that the timing circuit is separate. The \texttt{password\_hash} assignment is placed in its own thread, as the for loop condition is independent. The block inside the for loop does depend on this value, and so a syncline is setup. It is not clear from the schedule above, but the for loop is also parallelised. The schedule below shows the synclines between each iteration of the for loop.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{img/password-cracker/parallel-for.png}
+    \caption{A schedule to show how the for loop in the main method from the password cracker program is parallelised}
+\end{figure}
+
+As you can see from this for loop schedule, the \texttt{dictionary} and \texttt{password\_hash} variables are requested on the first line they are required in the iteration and sent to the next iteration when they are no longer needed. In this case, only one statement uses each external dependency, so it is immediately released. The \texttt{hash} function is computationally expensive, and can only be started once it has access to its word in the dictionary. The dictionary can be passed very quickly through all of the threads, as accessing the element inside a list is very fast. This allows multiple \texttt{hash} functions to be run at the same time. The \texttt{password\_hash} variable is requested after the \texttt{hash} function returns, meaning \texttt{id=1} cannot check whether it is equal to the \texttt{password\_hash} if its \texttt{hash} function returns before \texttt{id=0}.
 
 \subsection{Automatically Generated Sequential Programs}
-\todo{Write subsection}
+To verify that the parallelising compiler can parallelise more that the programs shown above, it was tested against $100$ randomly generated sequential programs. Each randomly generated sequential program was executed sequentially and in parallel to compare the outputs. This is to verify that the program semantics remains the same. The sequential and parallel program was run $10$ times, and their execution time was recorded. The number of concurrent threads executed was also recorded for the parallel program. I am not expecting a speedup in the parallel programs as the size of the problem remained fairly small, and is probably not enough to overcome the thread overhead. The more interesting value will be the number of concurrent threads executed, as this shows how much parallelism the parallelising compiler could find in the sequential program. It gives us a gauge on how fast the parallel version could be if there was no thread overhead.
+
+\todo{Show example of a randomly generated program?}
 
 \section{Results}
 \todo{Include results from automated testing}
