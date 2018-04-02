@@ -6,7 +6,12 @@
 \toccontents
 
 \section{Abstract}
-\todo{Write Abstract}
+Processors have been gaining more multi-core performance which sequential code cannot take advantage of. Many solutions exist to this problem including automatic parallelisation at the binary level, automatic parallelisation at the compiler and manually parallelising using annotations. The potential benefits of solving this problem are increased performance for existing programs, as well as making development of new software easier (as programmers do not need to worry about writing parallelised code).
+
+The author presents a design for a new parallelising compiler for the Rust programming language. To demonstrate the design, three sequential elements of Rust programs are manually converted by this paper: function calls, for-loops and branches.
+
+This report explores the literature in this area. A solution which automatically converts sequential source code into a parallelised program is designed, implemented and evaluated. using the rust programming language. The literature is explored and presenting into two main areas: theoretical models of automatic parallelisation and existing real-world parallelising compilers.
+
 
 \begin{center}
 All software for this project can be found at \\

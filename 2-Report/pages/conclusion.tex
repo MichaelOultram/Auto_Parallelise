@@ -1,6 +1,7 @@
 \chapter{Conclusion}
-The problem that I wanted to tackle was automatically converting sequential source code into a parallelised program. This is a hard problem which is well established in the field of computer science. A literature review was included as part of this report, but due to the size of the field, it is no where near complete. 
+The problem that I wanted to tackle was automatically converting sequential program into a parallelised program. This is a hard problem which is well established in the field of computer science. There are many different approaches explored in the literature, but I focused on converting the sequential source code automatically. Rust was chosen as the programming language used due to its memory management features and thread safety. Features of a parallelising compiler which would convert a sequential rust programs into a parallelised rust program was designed.  I chose to implement the design using a compiler plugin. While this did give me all the information required for dependency analysis, it was very complicated and difficult to access. Using the compiler plugin required me to deal with all of the syntax sugar, dramatically increasing the number of cases I had to deal with.  
 
-The solution I chose was to use a compiler plugin which had the downside that I had to deal with all of the syntax sugar. This dramatically increased the number of cases I had to deal with, and not all of them were dealt with correctly.
+
+and not all of them were dealt with correctly.
 
 \todo{Write conclusion}
