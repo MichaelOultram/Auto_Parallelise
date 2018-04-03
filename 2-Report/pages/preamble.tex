@@ -1,26 +1,19 @@
 \chapter{Preamble}
-\section{Contents}
-\makeatletter
-\newcommand*{\toccontents}{\@starttoc{toc}}
-\makeatother
-\toccontents
-
 \section{Abstract}
-Processors have been gaining more multi-core performance which sequential code cannot take advantage of. Many solutions exist to this problem including automatic parallelisation at the binary level, automatic parallelisation at the compiler and manually parallelising using annotations. The potential benefits of solving this problem are increased performance for existing programs, as well as making development of new software easier (as programmers do not need to worry about writing parallelised code).
+Processors have been gaining more multi-core performance which sequential code cannot take advantage of. Many solutions exist to this problem in the literature including automatic parallelisation at the binary level, at the compiler level and manually annotating parallelisable parts of source code. Solving this problem has many potential benefits: increased performance for existing programs and development of new software does not need to be parallelised manually by the programmer.
 
-The author presents a design for a new parallelising compiler for the Rust programming language. To demonstrate the design, three sequential elements of Rust programs are manually converted by this paper: function calls, for-loops and branches.
+The author introduces a new design for a parallelising compiler for the Rust programming language. The design focuses on safe statement level parallelism using a dependency analysis stage and a scheduling stage. The dependency analysis stage looks at each function individually for statements that use the same variables. The scheduling algorithm takes the dependency tree and tries to run as much as possible in separate threads using a ``maximum spanning tree" approach for any statement with multiple dependencies.
 
-This report explores the literature in this area. A solution which automatically converts sequential source code into a parallelised program is designed, implemented and evaluated. using the rust programming language. The literature is explored and presenting into two main areas: theoretical models of automatic parallelisation and existing real-world parallelising compilers.
-
+The design chosen was implemented using the plugin system for the rust compiler. Several adaptations were made to the design due to unforeseen complexities with the compiler. The end result was evaluated by testing in detail two example sequential programs as well as testing robustness using randomly generated sequential programs. \todo{Include results in abstract}
 
 \begin{center}
 All software for this project can be found at \\
 \url{https://github.com/MichaelOultram/Auto\_Parallelise}
 \end{center}
 
-\begin{comment}
-\section{Acknowledgements}
-Rust Compiler (\url{https://github.com/rust-lang/rust})
-
-Serde (\url{https://serde.rs/}): used to convert rust objects into JSON and back again
-\end{comment}
+\newpage
+\section{Contents}
+\makeatletter
+\newcommand*{\toccontents}{\@starttoc{toc}}
+\makeatother
+\toccontents

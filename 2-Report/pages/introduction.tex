@@ -1,16 +1,13 @@
 \chapter{Introduction}
+Processors have been gaining more multi-core performance which sequential code cannot take advantage of. Parallel code that can take advantage of the additional cores is more difficult than sequential code for the programmer to write. To increase the performance of the many existing sequential programs, they would need to be adapted/rewritten. Ideally we want an easy way to convert the easy to write (and existing) sequential code into parallelised code that can take advantage of the additional cores.
+The problem is well established in computer science and has many solutions. The solution that this report focuses on is using a parallelising compiler to convert sequential source code into a parallelised binary. Research done in this field has mostly focused on the C++ language although other researchers have had success using other languages. Some methods require manual annotation of the source code by the programmer to specify which parts of the program are parallelisable. Others have attempted to automatically detect these areas, but with an unsafe language like C++ it is challenging.
 
 \section{Related Work}
 \label{sec:related-work}
 
-Processors are being released with more cores. Sequential code cannot take advantage of these new cores. Writing parallel code is more difficult than writing sequential code. Existing sequential code would need to be rewritten to be parallelised. Ideally we want to gain the benefits of parallel code, whilst only having to write easy sequential code.
-
-\todo{Mention that it is a well researched area}
-One solution to this problem is a parallelising compiler. Research done in this field has mostly focused on the C/C++ language although other researches have had success using other languages. Some methods require manual annotation of the source code by the programmer to specify which parts of the program are parallelisable. Others have attempted to automatically detect these areas, but with an unsafe language like C++ it is challenging.
-
 \subsection{Parallelisation Models}
 \label{sec:related-models}
-In this section, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimising memory access patterns for multiple threads can increase performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel thread is `undone' and rerun.
+In this section, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimising memory access patterns for multiple threads can increase performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel threads are `undone' and rerun.
 
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
@@ -27,7 +24,7 @@ An alternative method to affine scheduling is iteration space slicing introduced
 \textcite{Prabhu2010} introduce two new language constructs for C\# to allow the programmer to manually specify areas of the program that can be speculatively parallelised. \textcite{Yiapanis2015} designs a parallelising compiler which can automatically take advantage of speculative parallelism.
 
 \subsection{Parallelisation Implementations}
-In this section we look at: parallelising compilers which focus on parallelising FORTRAN programs; OpenMP which is an model for shared memory programming and parallelising compilers which convert sequential CPU code into parallelised GPU code. Some of these parallelising compilers are based off of models described in \autoref{sec:related-models}.
+In this section we look at: parallelising compilers which focus on parallelising FORTRAN programs; OpenMP which is an model for shared memory programming and parallelising compilers which convert sequential CPU code into parallelised GPU code. Some of these parallelising compilers are based off of models described in the \hyperref[sec:related-models]{Related Models} section.
 
 \textcite{Eigenmann1998} manually parallelises the PERFECT benchmarks for FORTRAN which are compared with the original versions to calculate the potential speedup of an automatic parallelising compiler.
 \textcite{DHollander1998} developed a FORTRAN transformer which reconstructs code using \texttt{GOTO} statements so that more parallelisms can be detected. It performs dependency analysis and automatically parallelised loops by splitting the task into jobs. These jobs can be split between networked machines to run more jobs concurrently.
@@ -39,82 +36,122 @@ In this section we look at: parallelising compilers which focus on parallelising
 \textcite{Kim2000} introduces the ICP-PFC compiler for FORTRAN which uses the OpenMP model. All loops in the source code are analysed by calculated a dependency matrix. The compiler automatically adds the relevant OpenMP annotations to the loop.
 \textcite{Lam2011} extends OpenMP using machine learning to automate the parallelisation. The system is trained using a set containing programs already parallelised using OpenMP. The knowledge learned is applied to sequential programs to produce parallelised programs.
 
-A CPUs architecture is typically optimised for latency whereas a GPUs architecture is typically optimised for throughput. This can make GPUs perform much better that CPUs for a certain type of task. \textcite{Baskaran2010} uses the affine transformation model to convert sequential C code into parallelised CUDA code. \texttt{For} loops are tiled for efficient execution on the GPU.
+\pagebreak % Used so that the next page isn't just 2 lines
+A CPUs architecture is typically optimised for latency whereas a GPUs architecture is typically optimised for throughput. This can make GPUs perform much better that CPUs for certain types of task. \textcite{Baskaran2010} uses the affine transformation model to convert sequential C code into parallelised CUDA code. \texttt{For} loops are tiled for efficient execution on the GPU.
 
-\section{My Solution using Rust}
-Due to the limited time of the project, I am unlikely to contribute new ideas to the field. \todo{Add link here.} For my project, I focused on the safe language rust. Rust has a unique way of managing memory such that only one thread can access the memory space at once. This is guaranteed at compile time, and should make the process of automatically detecting dependencies much easier. Rust also allows plugins into the compiler (nightly feature only as of writing) which gives modification access to the abstract syntax tree.
-
+\section{Rust Programming Language}
 \label{sec:rust-language-features}
-Rust is similar to other programming languages such as C++ but it does has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. If the reader requires more in depth understanding than what is provided, then they should look at the language documentation, \textcite{rustbook}.
+Rust is a fairly new systems programming language with a focus on thread safety. Variables have an ownership and a lifetime which allows only one block to access the variable at once. This is guaranteed at compile time and should make the process of automatically detecting dependencies much easier than some of the approaches described in the \hyperref[sec:related-work]{Related Work} section. To test this hypothesis, the author proposes a design for a new paralleling compiler using the rust programming language. The rust nightly compiler allows for plugins which allows the author to implement their design as compiler plugins have modification access to the abstract syntax tree.
 
-\subsection{Safety Features}
-``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. To get these safety properties, rust has some unique features. The biggest difference to other programming languages is how variable are handled.
+The rust programming language is similar to C++ but it has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. If the reader requires more in depth understanding than what is provided, then they should look at the language documentation, \textcite{rustbook}.
 
-\subsubsection{Ownership}
+%\subsection{Safety Features}
+%``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. To get these safety properties, rust has some unique features. The biggest difference to other programming languages is how variable are handled.
+
+\subsection{Ownership}
 In Rust, all variables have an ownership. Only one block can have access to that variable at a time. This is enforced at compile time.
 
 \begin{code}
 \begin{minted}{rust}
 fn main() {
-    let a = 10;
+    let a = vec![10];
     f(&a);
-    g(a);
+    g(a.clone());
+    h(a);
     // Cannot access a here anymore
 }
-fn f(a: &u32){} // f borrows a
-fn g(a: u32){} // g takes ownership of a
+
+// 'f' borrows 'a'
+fn f(a: &Vec<u32>){}
+
+// 'g' takes ownership of a copy of `a`
+fn g(a: Vec<u32>){}
+
+// 'h' takes ownership of a
+fn h(a: Vec<u32>){}
 \end{minted}
 \caption{Borrowing and moving example}
 \end{code}
 
 In this example, \texttt{a} is a local variable in the \texttt{main} method.
-
 When \texttt{f} is called with parameter \texttt{a}, the function borrows that variable. This is similar to call-by-reference from other programming languages.
+When \texttt{h} is called with parameter \texttt{a}, the variable is moved to \texttt{h}. This is unlike other programming languages as this is not call-by-value. Instead \texttt{h} takes ownership of \texttt{a}. When \texttt{h} is returned, the main method can no longer use \texttt{a}.
+The \texttt{g} function also wants to take ownership of the variable \texttt{a}, but we want the \texttt{main} method to keep the ownership. To do this, \texttt{a} is cloned and this copy is moved into \texttt{g}. If the type of \texttt{a} implemented the \texttt{Copy} trait, then the compiler would automatically clone the variable instead of moving, allowing access to \texttt{a} after the \texttt{h} function call.
 
-When \texttt{g} is called with parameter \texttt{a}, the variable is moved to \texttt{g}. This is unlike other programming languages as this is not call-by-value. Instead \texttt{g} takes ownership of \texttt{a}. When \texttt{g} is returned, the main method can no longer use \texttt{a}.
-
-\subsubsection{Mutability}
-Variables mutability is declared when the variable is declared. In rust, variables are immutable by default, but if specified they are mutable. When a variable is borrowed, it can either be immutably borrowed or mutably borrowed.
+\subsection{Mutability}
+Variables mutability is declared when the variable is declared. In rust, variables are immutable by default, but if specified they are mutable. When a variable is borrowed, it can either be immutably borrowed or mutably borrowed (if the variable itself is mutable).
 
 \begin{code}
 \begin{minted}{rust}
 fn main() {
     let a = 10;
     let mut b = 20;
-    f(&a, &b);
+    let c = f(&a, &b);
+    assert!(a == 10 && b == 20 && c = 30);
     g(&mut b);
+    assert!(a == 10 && b == 21 && c = 30);
 }
-fn f(a: &u32, b: &u32){} // f immutably borrows a and b
-fn g(b: &mut u32){} // g mutably borrows b
+
+// 'f' immutably borrows 'a' and 'b'
+fn f(a: &u32, b: &u32) -> u32 {
+    a + b // No semicolon means (a + b) is returned
+}
+
+// 'g' mutably borrows 'b'
+fn g(b: &mut u32) {
+    b += 1;
+}
 \end{minted}
 \caption{Immutable and mutable borrowing}
 \end{code}
 
-In the \texttt{main} method of this example, \texttt{a} is an immutable local variable and \texttt{b} is a mutable local variable. The \texttt{f} function borrows both \texttt{a} and \texttt{b} immutably. Even though \texttt{b} is declared as mutable, it cannot be changed inside \texttt{f}. Once \texttt{f} returns, \texttt{b} becomes mutable again inside the \texttt{main} method. The \texttt{g} function shows how \texttt{b} can be borrowed mutably.
+In the \texttt{main} method of this example, \texttt{a} is an immutable local variable and \texttt{b} is a mutable local variable. The \texttt{f} function borrows both \texttt{a} and \texttt{b} immutably. Even though \texttt{b} is declared as mutable, it cannot be changed inside \texttt{f}. Once \texttt{f} returns, \texttt{b} becomes mutable again inside the \texttt{main} method. The \texttt{g} function shows how \texttt{b} can be borrowed mutably. Any changes to \texttt{b} inside \texttt{g} would be reflected in the \texttt{main} method as expected.
 
-\subsubsection{Unsafe Blocks}
-The programmer may want can turn off some of rust's safety features by using an unsafe block. The most common use of an unsafe block is to modify a mutable static variable but it also allows de-referencing of a raw pointer and calling unsafe functions (i.e. an external c function). Using unsafe blocks may introduce race conditions as two threads could try to modify a global at the same time, and the rust language would not guarantee an order.
+\subsection{Unsafe Blocks}
+Some features required of a systems programming language are not safe. Rust allows the programmer to turn off some of rust's safety features by using an unsafe block. The most common use of an unsafe block is to modify a mutable static variable but it also allows de-referencing of a raw pointer and calling unsafe functions (i.e. an external c function). Using unsafe blocks may introduce race conditions as two threads could try to modify a global at the same time, and the rust language would not guarantee an order.
 
 \begin{code}
 \begin{minted}{rust}
 static mut global: u32 = 3;
 fn main() {
     let a = global;
+    assert!(global == 3);
     inc_global();
+    assert!(global == 4);
     unsafe {
         global = 5;
     }
+    assert!(global == 5);
 }
 
 unsafe fn inc_global() {
     global += 1;
 }
 \end{minted}
-\caption{Immutable and mutable borrowing}
+\caption{An example using an unsafe block and function to modify a static variable}
 \end{code}
 
 \subsection{Threads}
-Rust uses real threads. Due to memory design, only one thread can have access to a variable safely at once. Channels are used to communicate between threads and can move a variable from one thread to another. This variable must implement the Send trait.
+Due to ownership model in rust, only one thread can have access to a variable safely at once. When the thread is spawned, all variables referenced are moved into the thread. A channels are used to communicate between spawned threads and can move a variable from one thread to another. For the variable to be sent via a channel, it must implement the \texttt{Send} trait.
 
-\subsection{Crates}
-\todo{Write subsection}
+\begin{code}
+\begin{minted}{rust}
+fn main() {
+    // Create a channel
+    let (sender, receiver) = ::std::sync::mpsc::channel();
+    // Spawn a thread
+    let join_handle = ::std::thread::spawn(move || {
+        let a = receiver.recv().unwrap();
+        2 * a
+    });
+    // Send 10 down the channel
+    sender.send(10);
+    // Wait for the thread to end, and get its return value
+    let b = join_handle.join().unwrap();
+    assert!(b == 20);
+}
+\end{minted}
+\caption{An example using threads and a channel}
+\end{code}
+
+In this example, a channel is created with a \texttt{sender} and \texttt{receiver} variable. A new thread is spawned which takes ownership of the \texttt{receiver} variable. This thread receives a value \texttt{a}, and returns $2\times\texttt{a}$. The \texttt{main} method uses the \texttt{sender} variable to send $10$ down the channel. It then uses the \texttt{join\_handle} to wait for the thread to return, and gets its value.
