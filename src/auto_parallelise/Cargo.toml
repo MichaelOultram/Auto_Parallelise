@@ -7,6 +7,8 @@ authors = ["Michael Oultram <michael@oultr.am>"]
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
+rand = "*"
+lazy_static = "*"
 
 [lib]
 plugin = true

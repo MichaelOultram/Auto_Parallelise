@@ -1,3 +1,6 @@
+pub mod static_programs;
+pub mod generated_programs;
+
 use std::path::Path;
 use std::process::Command;
 use utils;
@@ -159,11 +162,3 @@ fn test_foldered_program(folder: &str) {
     // Remove parallel folder
     fs::remove_dir_all(&parallel_path);
 }
-
-
-#[test]
-fn password_simple() { test_foldered_program("../password-simple") }
-#[test]
-fn simple_example() { test_foldered_program("../simple-example") }
-#[test]
-fn fibinacci() { test_foldered_program("../fibinacci") }
