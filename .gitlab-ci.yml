@@ -5,7 +5,7 @@ stages:
 build:
     stage: build   
     before_script:
-        - curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain nightly-2018-03-05
+        - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2018-03-05
     script:
         - cd src/auto_parallelise
         - cargo build --release
