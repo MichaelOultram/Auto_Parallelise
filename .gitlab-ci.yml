@@ -9,10 +9,10 @@ build:
         - RUSTUP_HOME=/rust CARGO_HOME=/rust curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path --default-toolchain nightly-2018-03-05
     script:
         - cd src/auto_parallelise
-        - /rust/cargo build --release
+        - /rust/bin/cargo build --release
 test:
     stage: test  
     script:
         - cd src/auto_parallelise
-        - /rust/cargo test --release
+        - /rust/bin/cargo test --release
 
