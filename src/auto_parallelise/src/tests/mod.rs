@@ -1,5 +1,4 @@
 pub mod static_programs;
-pub mod generated_programs;
 
 use std::path::Path;
 use std::process::Command;

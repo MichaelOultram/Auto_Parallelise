@@ -1,0 +1,8 @@
+[package]
+name = "sequential-program-generator"
+version = "0.1.0"
+authors = ["Michael Oultram <michael@oultr.am>"]
+
+[dependencies]
+rand = "*"
+lazy_static = "*"

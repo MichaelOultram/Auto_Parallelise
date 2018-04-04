@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Michael Oultram <michael@oultr.am>"]
 
 [dependencies]
-rust-crypto = "0.2.36"
-num_cpus = "*"
-time = "*"
+auto_parallelise = { version = "0.1.0", path = "../auto_parallelise"}
+#rust-crypto = "0.2.36"
+#num_cpus = "*"
+#time = "*"

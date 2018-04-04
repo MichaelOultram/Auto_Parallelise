@@ -26,16 +26,18 @@ impl EarlyLintPass for AutoParallelise {
 
         match _fnkind {
             // fn foo()
-            FnKind::ItemFn(_ident, _unsafety, _spanned, _abi, _visibility, _block) => {
+            FnKind::ItemFn(ident, _, _, _, _, block) |
+            // fn foo(&self), i.e. obj.foo();
+            FnKind::Method(ident, _, _, block) => {
                 eprintln!("\n\n{:?}", _fndecl);
-                let ident_name: String = _ident.name.to_string();
-                let ident_ctxt: String = format!("{:?}", _ident.ctxt);
+                let ident_name: String = ident.name.to_string();
+                let ident_ctxt: String = format!("{:?}", ident.ctxt);
                 let input_types = vec![]; // TODO
                 for ref arg in &_fndecl.inputs {
                     eprintln!("ARG: {:?}, {:?}", arg.ty.node, arg.pat);
                 }
 
-                let deptree = dependency_analysis::analyse_block(&_block);
+                let deptree = dependency_analysis::analyse_block(&block);
                 eprintln!("DEPTREE:");
                 for node in &deptree {
                     let node_json = match serde_json::to_string_pretty(&node) {
@@ -65,12 +67,8 @@ impl EarlyLintPass for AutoParallelise {
                 });
             },
 
-            // fn foo(&self), i.e. obj.foo();
-            FnKind::Method(_ident, _method_sig, _visibility, _block) => unimplemented!(),
-
-
             // |x, y| body
-            FnKind::Closure(_body) => unimplemented!(),
+            FnKind::Closure(_body) => {}, //unimplemented!(),
         }
         self.save();
     }
