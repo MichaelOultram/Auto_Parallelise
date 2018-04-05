@@ -4,10 +4,10 @@ extern crate rand;
 use rand::{Rng, thread_rng};
 
 type Block = Vec<StmtKind>;
-fn block_to_string(block: &Block) -> String {
+fn block_to_string(block: &Block, printid: &mut u32) -> String {
     let mut output = "{\n".to_owned();
     for stmt in block {
-        output.push_str(&stmt.to_string());
+        output.push_str(&stmt.to_string(printid));
         output.push_str("\n");
     }
     output.push_str("}");
@@ -76,7 +76,10 @@ impl ExprKind {
                 }
                 &"Var" => {
                     if let Some(var) = rng.choose(&env) {
-                        return Box::new(ExprKind::Var(var.clone()));
+                        match var {
+                            &Variable::Int(_) => return Box::new(ExprKind::Var(var.clone())),
+                            &Variable::List(_) => {},
+                        }
                     }
                 }
                 &&_ => panic!("Not found in EXPR_KIND_LIST: {}", exprid),
@@ -116,7 +119,7 @@ enum StmtKind {
 }
 
 impl StmtKind {
-    pub fn to_string(&self) -> String {
+    pub fn to_string(&self, printid: &mut u32) -> String {
         match self {
             &StmtKind::NewVar(ref var) => match var {
                 &Variable::Int(ref varname) => format!("let mut {}: i32 = 0;", varname),
@@ -127,14 +130,14 @@ impl StmtKind {
             format!("{} = {};", var.to_string(), value.to_string()),
 
             &StmtKind::ForRange(ref var, ref from, ref to, ref inner_block) =>
-            format!("for {} in 0.max({})..100.min({}) {{\n{}\n}}", var.to_string(), from.to_string(), to.to_string(), block_to_string(inner_block)),
+            format!("for mut {} in 0.max({})..100.min({}) {{\n{}\n}}", var.to_string(), from.to_string(), to.to_string(), block_to_string(inner_block, printid)),
 
             &StmtKind::ForList(ref var, ref list, ref inner_block) =>
-            format!("for {} in {}.clone() {{\n{}\n}}", var.to_string(), list.to_string(), block_to_string(inner_block)),
+            format!("for mut {} in {}.clone() {{\n{}\n}}", var.to_string(), list.to_string(), block_to_string(inner_block, printid)),
 
             &StmtKind::IfLtElse(ref a, ref b, ref true_block, ref false_block) =>
             //format!("if ({}) < ({}) {} else {}", a.to_string(), b.to_string(),
-            format!("if ({}) < ({}) {}", a.to_string(), b.to_string(), block_to_string(true_block)),
+            format!("if ({}) < ({}) {}", a.to_string(), b.to_string(), block_to_string(true_block, printid)),
             //block_to_string(false_block)),
 
             &StmtKind::Push(ref var, ref value) =>
@@ -145,21 +148,32 @@ impl StmtKind {
 
             &StmtKind::Print(ref val) => {
                 let val_str = val.to_string();
-                format!("println!(\"{} = {{:?}}\", {});", val_str, val_str)
+                *printid += 1;
+                format!("println!(\"{:08}: {} = {{:?}}\", {});", *printid - 1, val_str, val_str)
             },
         }
     }
 }
 
-fn generate_block(num_statements: usize, external_env: &Vec<Variable>) -> Block {
+fn gen_var(avoid_env: &Vec<String>) -> String {
+    let mut rng = thread_rng();
+    loop {
+        let varname = rng.choose(&ALPHABET).unwrap().to_string();
+        if !avoid_env.contains(&varname) {
+            return varname;
+        }
+    }
+}
+
+fn generate_block(num_statements: usize, external_env: &Vec<Variable>, avoid_env: &Vec<String>) -> Block {
     let mut env: Vec<Variable> = external_env.clone();
     let mut program: Block = vec![];
     let mut rng = thread_rng();
     while program.len() < num_statements {
         match rng.choose(&STMT_KIND_LIST).unwrap() {
             &"NewVar" => {
-                let varname: String = rng.choose(&ALPHABET).unwrap().to_string();
-                let var = if rng.gen() {
+                let varname = gen_var(avoid_env);
+                let var = if true { //rng.gen() {
                     Variable::Int(varname.clone())
                 } else {
                     Variable::List(varname.clone())
@@ -175,27 +189,31 @@ fn generate_block(num_statements: usize, external_env: &Vec<Variable>) -> Block 
                 }
             },
             &"ForRange" => {
-                let varname: String = rng.choose(&ALPHABET).unwrap().to_string();
-                let iter_var = Variable::Int(varname);
+                let varname = gen_var(avoid_env);
+                let iter_var = Variable::Int(varname.clone());
+                let mut avoid_env = avoid_env.clone();
+                avoid_env.push(varname.clone());
                 let from = ExprKind::generate(EXPR_HEIGHT, &env);
                 let to = ExprKind::generate(EXPR_HEIGHT, &env);
-                let inner_block = generate_block(num_statements / 2, &env);
+                let inner_block = generate_block(num_statements / 2, &env, &avoid_env);
                 program.push(StmtKind::ForRange(iter_var, from, to, inner_block));
             },
             &"ForList" => {
-                let varname: String = rng.choose(&ALPHABET).unwrap().to_string();
-                let iter_var = Variable::Int(varname);
+                let varname = gen_var(avoid_env);
+                let mut avoid_env = avoid_env.clone();
+                avoid_env.push(varname.clone());
+                let iter_var = Variable::Int(varname.clone());
                 let list_var = rng.choose(&env);
                 if let Some(&Variable::List(_)) = list_var {
-                    let inner_block = generate_block(num_statements / 2, &env);
+                    let inner_block = generate_block(num_statements / 2, &env, &avoid_env);
                     program.push(StmtKind::ForList(iter_var, list_var.unwrap().clone(), inner_block));
                 }
             },
             &"IfLtElse" => {
                 let a = ExprKind::generate(EXPR_HEIGHT, &env);
                 let b = ExprKind::generate(EXPR_HEIGHT, &env);
-                let block_a = generate_block(num_statements / 2, &env);
-                let block_b = generate_block(num_statements / 2, &env);
+                let block_a = generate_block(num_statements / 2, &env, avoid_env);
+                let block_b = generate_block(num_statements / 2, &env, avoid_env);
                 program.push(StmtKind::IfLtElse(a, b, block_a, block_b));
             },
             &"Push" => {
@@ -226,12 +244,9 @@ fn generate_block(num_statements: usize, external_env: &Vec<Variable>) -> Block 
 
 fn main() {
     let num_statements = ::std::env::args().last().unwrap().parse().unwrap();
-    let inner_block = block_to_string(&generate_block(num_statements, &vec![]));
+    let mut printid = 0;
+    let inner_block = block_to_string(&generate_block(num_statements, &vec![], &vec![]), &mut printid);
     let source_code = format!("
-#![feature(plugin)]
-#![plugin(auto_parallelise)]
-
-#[autoparallelise]
 fn main() {{
 let stdin: Vec<i32> = ::std::env::args().skip(1).map(|i| i.parse::<i32>().unwrap()).collect();
 {}

@@ -1,5 +1,6 @@
 use syntax::ptr::P;
-use syntax::ast::{self, Local, Stmt, StmtKind, Expr, ExprKind, Block, Ident, Item, ItemKind, Path, PathSegment};
+use syntax::ast::{self, Local, Stmt, StmtKind, Expr, ExprKind, Block, Ident, Item, ItemKind, Path, PathSegment, Pat, PatKind};
+use syntax::codemap::dummy_spanned;
 use syntax::ext::base::{ExtCtxt};
 use syntax_pos::{BytePos, Span};
 use std::ops::Deref;
@@ -27,17 +28,16 @@ pub fn create_block(cx: &mut ExtCtxt, stmts: Vec<Stmt>, stmtid: Option<StmtID>) 
     }
 }
 
-pub fn create_path(cx: &mut ExtCtxt, pathname: PathName) -> P<Expr> {
+pub fn create_path(pathname: PathName) -> Path {
     let mut segments = vec![];
     for segment_ident in pathname {
         let segment = PathSegment::from_ident(segment_ident, Span::default());
         segments.push(segment);
     }
-    let var_name = Path {
+    Path {
         span: Span::default(),
         segments: segments,
-    };
-    quote_expr!(cx,$var_name)
+    }
 }
 
 pub fn create_function(cx: &mut ExtCtxt, item: &Item, func_name: &str, join_handle: bool, body: Block) -> (Ident, Item) {
@@ -77,11 +77,27 @@ fn create_thread(cx: &mut ExtCtxt, lo: u32, hi: u32, thread_contents: Vec<Stmt>)
     (thread_name, thread_stmt)
 }
 
-fn envtuple(cx: &mut ExtCtxt, env: &Environment) -> P<Expr> {
+fn envtuple_expr(cx: &mut ExtCtxt, env: &Environment) -> P<Expr> {
     let mut tuple = quote_expr!(cx, ()).deref().clone();
     if let ExprKind::Tup(ref mut exprl) = tuple.node {
         for var in env.clone().into_iter() {
-            exprl.push(create_path(cx, var));
+            let path = create_path(var);
+            exprl.push(quote_expr!(cx, $path));
+        }
+    } else {
+        panic!("was not tup")
+    }
+    eprintln!("ENV: {:?}, TUPLE: {:?}", env, tuple);
+    P(tuple)
+}
+
+fn envtuple_pat(cx: &mut ExtCtxt, env: &Environment) -> P<Pat> {
+    let mut tuple = quote_pat!(cx, ()).deref().clone();
+    if let PatKind::Tuple(ref mut pats, _) = tuple.node {
+        for var in env.clone().into_iter() {
+            let ident = var[0];
+            let spanned_ident = dummy_spanned(ident);
+            pats.push(quote_pat!(cx, mut $spanned_ident));
         }
     } else {
         panic!("was not tup")
@@ -135,8 +151,8 @@ pub fn create_seq_fn(cx: &mut ExtCtxt, seq_fn_name: &String, parident: &Ident, i
                         let pat = arg.pat.deref().clone();
                         let env = deconstructor::check_pattern(&mut vec![], &pat.node);
                         assert!(env.len() == 1);
-                        let patexpr = create_path(cx, env.get(0).unwrap().clone()).clone();
-                        exprl.push(patexpr);
+                        let patexpr = create_path(env.get(0).unwrap().clone()).clone();
+                        exprl.push(quote_expr!(cx, patexpr));
                     }
                     // Reconstruct statement
                     Stmt {
@@ -229,7 +245,7 @@ fn spawn_from_schedule_helper<'a>(config: &Config, cx: &mut ExtCtxt, sch: &Vec<S
         if let ScheduleTree::SyncTo(ref stmtid1, ref stmtid2, ref env) = sch[i] {
             let line_name = syncline_name(stmtid1, stmtid2, env);
             let sx = Ident::from_str(&format!("{}_send", line_name));
-            let envexpr = envtuple(cx, env);
+            let envexpr = envtuple_expr(cx, env);
             let prereq = quote_stmt!(cx, $sx.send($envexpr).unwrap();).unwrap();
             output.push(prereq);
         } else {
@@ -246,7 +262,7 @@ fn spawn_from_schedule_helper<'a>(config: &Config, cx: &mut ExtCtxt, sch: &Vec<S
                         let line_name = syncline_name(stmtid1, stmtid2, sync_env);
                         let rx = Ident::from_str(&format!("{}_receive", line_name));
                         let prereq = if sync_env.len() > 0 {
-                            let envexpr = envtuple(cx, sync_env);
+                            let envexpr = envtuple_pat(cx, sync_env);
                             quote_stmt!(cx, let $envexpr = $rx.recv().unwrap();).unwrap()
                         } else {
                             quote_stmt!(cx, $rx.recv().unwrap();).unwrap()
@@ -548,7 +564,7 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                         iteration_stmts.push(quote_stmt!(cx, $rxi = $rxn;).unwrap());
                         // Send
                         let send_stmt = if env.len() > 0 {
-                            let envexpr = envtuple(cx, env);
+                            let envexpr = envtuple_expr(cx, env);
                             quote_stmt!(cx, $sx0.send($envexpr).unwrap();).unwrap()
                         } else {
                             quote_stmt!(cx, $sx0.send(()).unwrap();).unwrap()
@@ -556,7 +572,7 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                         send_stmts.push(send_stmt);
                         // Collection
                         let collection_stmt = if env.len() > 0 {
-                            let envexpr = envtuple(cx, env);
+                            let envexpr = envtuple_pat(cx, env);
                             quote_stmt!(cx, let $envexpr = $rxi.recv().unwrap();).unwrap()
                         } else {
                             quote_stmt!(cx, $rxi.recv().unwrap();).unwrap()
@@ -594,14 +610,14 @@ fn exprblock_into_statement<'a>(config: &Config, cx: &mut ExtCtxt, exprstmt: Stm
                     start_end_stmts.append(&mut send_stmts);
                     start_end_stmts.append(&mut collection_stmts);
                     if return_inenv.len() > 0 {
-                        let envexpr = envtuple(cx, &return_inenv);
+                        let envexpr = envtuple_expr(cx, &return_inenv);
                         start_end_stmts.push(quote_stmt!(cx, $envexpr).unwrap());
                     }
                     let start_end_block = create_block(cx, start_end_stmts, None);
 
                     // Combine start_end_block with a let statement
                     let stmt = if return_inenv.len() > 0 {
-                        let envexpr = envtuple(cx, &return_inenv);
+                        let envexpr = envtuple_pat(cx, &return_inenv);
                         quote_stmt!(cx, let $envexpr = $start_end_block;).unwrap()
                     } else {
                         quote_stmt!(cx, $start_end_block;).unwrap()

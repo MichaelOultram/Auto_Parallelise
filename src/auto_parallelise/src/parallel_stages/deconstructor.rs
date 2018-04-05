@@ -426,8 +426,7 @@ pub fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironm
                 }
             },
 
-            ExprKind::If(ref expr1, ref block1, ref mexpr2) |
-            ExprKind::IfLet(_, ref expr1, ref block1, ref mexpr2) => {
+            ExprKind::If(ref expr1, ref block1, ref mexpr2) => {
                 let (subdeptree, sub_env) = analyse_block_with_env(block1);
                 let (subinenv, suboutenv) = sub_env.clone();
                 dependencies.extend(subinenv.into_iter());
@@ -441,9 +440,29 @@ pub fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironm
                 }
             },
 
-            ExprKind::While(ref expr1, ref block1, _) |
-            ExprKind::WhileLet(_, ref expr1, ref block1, _) |
-            ExprKind::ForLoop(_, ref expr1, ref block1, _) => {
+            ExprKind::IfLet(ref pats, ref expr1, ref block1, ref mexpr2) => {
+                let (subdeptree, sub_env) = analyse_block_with_env(block1);
+                let (mut subinenv, mut suboutenv) = sub_env;
+
+                // Remove pats as a dependenciess
+                for pat in pats {
+                    let patternenv = check_pattern(&mut vec![], &pat.deref().node);
+                    subinenv.remove_env(patternenv.clone());
+                    suboutenv.remove_env(patternenv);
+                }
+
+                dependencies.extend(subinenv.clone().into_iter());
+                produces.extend(suboutenv.clone().into_iter());
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], (subinenv, suboutenv)));
+                // TODO: Examine subdeptree for external dependencies and update vec![node_id]
+                if let &Some(ref expr2) = mexpr2 {
+                    vec![expr1.clone(), expr2.clone()]
+                } else {
+                    vec![expr1.clone()]
+                }
+            },
+
+            ExprKind::While(ref expr1, ref block1, _) => {
                 let (subdeptree, sub_env) = analyse_block_with_env(block1);
                 let (subinenv, suboutenv) = sub_env.clone();
                 dependencies.extend(subinenv.into_iter());
@@ -451,6 +470,39 @@ pub fn check_expr(sub_blocks: &mut DependencyTree, expr: &Expr) -> InOutEnvironm
                 sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], sub_env));
                 vec![expr1.clone()]
             },
+
+            ExprKind::WhileLet(ref pats, ref expr1, ref block1, _) => {
+                let (subdeptree, mut sub_env) = analyse_block_with_env(block1);
+                let (mut subinenv, mut suboutenv) = sub_env;
+
+                // Remove pats as a dependenciess
+                for pat in pats {
+                    let patternenv = check_pattern(&mut vec![], &pat.deref().node);
+                    subinenv.remove_env(patternenv.clone());
+                    suboutenv.remove_env(patternenv);
+                }
+
+                dependencies.extend(subinenv.clone().into_iter());
+                produces.extend(suboutenv.clone().into_iter());
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], (subinenv, suboutenv)));
+                vec![expr1.clone()]
+            },
+
+            ExprKind::ForLoop(ref pat, ref expr1, ref block1, _) => {
+                let (subdeptree, mut sub_env) = analyse_block_with_env(block1);
+                let (mut subinenv, mut suboutenv) = sub_env;
+
+                // Remove pat as a dependency
+                let patternenv = check_pattern(&mut vec![], &pat.deref().node);
+                subinenv.remove_env(patternenv.clone());
+                suboutenv.remove_env(patternenv);
+
+                dependencies.extend(subinenv.clone().into_iter());
+                produces.extend(suboutenv.clone().into_iter());
+                sub_blocks.push(DependencyNode::Block(stmtID!(block1), subdeptree, vec![], (subinenv, suboutenv)));
+                vec![expr1.clone()]
+            },
+
 
             ExprKind::Loop(ref block1, _) |
             ExprKind::Block(ref block1) |
