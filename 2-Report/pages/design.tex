@@ -1,24 +1,24 @@
 \chapter{Design}
 \label{chapter:Design}
-This chapter covers the original design concepts of my parallelising compiler without realising the full internal details of the compiler. Once I began developing the compiler, I realised some mistakes in the design which I did not fully think through and some adaptations that I had to do due to the structure of the rust compiler. These changes are described in \autoref{chapter:Implementation}. Also due to time constraints, not all the features described in this chapter were implemented.
+This chapter covers the original design concepts of my parallelising compiler without realising the full internal details of the rust compiler. Once I began developing my design, I made some adaptations (described in \autoref{chapter:Implementation}) as some elements ended up being more challenging to implement inside the rust compiler than expected.
+%Due to time constraints, not all the features described in this chapter were implemented. \todo{Check this.}
+Before describing the design of my parallelising compiler, we should first look at the structure of the rust abstract syntax tree. It consists of three main types: blocks, statements and expressions. A block contains a list of statements and a statement is a combination of expressions. Ifs and loops are represented as expressions which can contain a block within itself.
 
-The rust abstract syntax tree consists of three main types: Blocks, Statements and Expressions. A block contains a list of statements and a statement is a combination of expressions. A block can be represented as an expression (either directly, or inside a loop/if/etc.) which allows for infinite depth in the tree. Variables are a type of expression. My parallelising compiler will focus on statement level parallelisation within a given block.
-
-Parallelising compilers described in the literature (\autoref{sec:related-work}) are split into several stages. Similarly, the design of my compiler is in two main stages, the analysis stage and the modification stage. Both these stages contain several steps to achieve their goal. The analysis stage looks at each function in the source code and tries to find parts that could be parallelised. The modification stage takes the parts that can be parallelised and changes the source code so that they run in parallel.
+My parallelising compiler is designed to find safe statement level parallelisation within a given block. It is split into two main stages, the analysis stage and the modification stage, each of which are split into several steps. The analysis stage looks at each function in the source code and tries to find parts that could be parallelised. The modification stage takes the parts that can be parallelised and changes the source code so that they run in parallel.
 
 \section{Analysis Stage}
 \begin{algorithm}[H]
 \caption{Dependency Analysis Algorithm}
 \label{alg:dependency-analysis}
 \begin{algorithmic}[1]
-    \Require $block$ as a list of Statements
+    \Require $block$ as a list of statements
     \State $envs = \{\}$
     \State $deps = \{\}$
-    \State $block\_env = []$ \Comment Statement Environment of the Block when represented as a Statement
+    \State $block\_env = \{\}$ \Comment Block's environment, for unmet statement dependencies
 	\For{$stmt$ \textbf{in} $block$}
         \State $stmt\_env =$ Set of variables that $stmt$ uses
         \State $envs.push(stmt\_env)$
-        \State $stmt\_deps = \{\}$
+        \State $stmt\_deps = \{\}$ \Comment Set of array ids representing dependent statements
         \For{$i =$ length($stmt\_env$) $- 1$ \textbf{to} 0} \Comment Search backwards for $var$s in $stmt\_env$
             \State $dep\_env = envs[i]$
             \For{\textbf{all} $var$ \textbf{where} ($var$ \textbf{is in} $stmt\_env$) \textbf{and} ($var$ \textbf{is in} $dep\_env$)}
@@ -31,7 +31,7 @@ Parallelising compilers described in the literature (\autoref{sec:related-work})
 \end{algorithmic}
 \end{algorithm}
 
-Each statement is analysed individually to provide a list of variables that the statement accesses. This list describes the variable dependencies that the statement has, but it does not describe which statements must be executed before the current one for the program to remain correct. To get this information, the algorithm looks at each statement in turn. For each variable that it requires, it looks at the statements before it in the block in reverse order for that variable to be its list of variable dependencies. The first statement found containing this variable as a dependency is added as a statement dependency. Any variables that were not found above the current statement must be defined outside the current block, and so are added as the current blocks dependency. This algorithm is shown in Algorithm \autoref{alg:dependency-analysis}.
+Each statement in a block is analysed individually to provide a set of variables that the statement accesses. This set describes the variable dependencies that the statement has, but it does not describe which statements must be executed before the current one for the program to remain correct. To get this information, the algorithm looks backwards from the current statement for each variable that the current statement requires. The first statement found containing the variable its environment is added as a statement dependency. Any variables that were not found above the current statement must be defined outside the current block, and so are added as the current blocks environment. This algorithm is shown in Algorithm \autoref{alg:dependency-analysis}.
 
 
 \section{Modification Stage}
@@ -51,13 +51,15 @@ Each statement is analysed individually to provide a list of variables that the 
 % Currently just a fixed number 1
 The dependency tree provided by the analysis stage shows what statements can be run in parallel. Some of these statements have multiple dependencies, all of which must be met before the statement is run. Each of these dependencies could be in a separate thread, and so some synchronisation technique is needed. The dependency tree is converted into a schedule tree so that we know which statements are run in which threads, and where/when synchronisation is required between threads.
 
+The scheduling algorithm got its inspiration from minimum spanning trees. We make the naive assumption that threads have no overhead and so we want to run as much as possible in separate threads. Whenever synchronisation is required, we want to reduce the amount of time that a thread has to wait. If the thread that requires a dependency is slower than the thread that releases the dependency, then no waiting is required. This is where the idea of using a ''maximum spanning tree".
+
 \begin{algorithm}[H]
 \caption{Scheduling Algorithm}
 \label{alg:scheduling}
 \begin{algorithmic}[1]
-    \Require $block$ as a list of Statements
-    \Require $envs$ as a list Statement Environments
-    \Require $deps$ as a list Statement Dependencies
+    \Require $block$ as a list of statements
+    \Require $envs$ as a list statement environments
+    \Require $deps$ as a list statement dependencies
     \State $schedule\_trees = []$
     \For{$i=0$ \textbf{in} length($block$) - 1} \Comment Add all independent statements to separate trees
         \If{length($deps[i]$) == 0}
@@ -81,4 +83,4 @@ The dependency tree provided by the analysis stage shows what statements can be 
 \end{algorithmic}
 \end{algorithm}
 
-\todo{Maximum Spanning Trees.} The scheduling algorithm designed aims to run as much as possible in separate threads. It makes the naive assumption that threads have no overhead. To start of with, the algorithm looks for any statements with no dependencies. Each of these statements can be run in a separate thread. For all the remaining statements, the algorithm looks selects the set of statements that have all their dependencies in the schedule already. If the statement only has one dependency, then that statement is added directly after that dependency. If the statement has more than one, then the algorithm looks to see which dependency has the longest chain. The thought behind this is that this dependency should be the slowest, and so all the other dependencies should have been finished by this point. To make sure that there are no race conditions, a syncline is introduced from the other dependencies to just before the current statement. This algorithm is repeated until all the statements are in the schedule. Since there cannot be any cyclic dependencies due to the way that the dependency analysis algorithm was designed, this is guaranteed to terminate. This algorithm is shown in Algorithm \autoref{alg:scheduling}.
+The algorithm starts by looking for any statements with no dependencies. Each of these statements is run in a separate thread. For all the remaining statements, the algorithm looks selects the set of statements that have all their dependencies in the schedule already. If the statement only has one dependency, then that statement is added directly after that dependency. If the statement has more than one dependency, then the algorithm looks to see which dependency has the longest chain. The thought behind this is that this dependency should be the slowest, and so all the other dependencies should have been finished by this point. To make sure that there are no race conditions, a syncline is introduced from the other dependencies to just before the current statement. This algorithm is repeated until all the statements are in the schedule. Since there cannot be any cyclic dependencies due to the way that the dependency analysis algorithm was designed, this is guaranteed to terminate. This algorithm is shown in Algorithm \autoref{alg:scheduling}.
