@@ -358,8 +358,10 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                                     let mut sync_env = treeoutenv.clone();
                                     sync_env.remove_env(diff_env);
                                     eprintln!("sync_env: {:?}", sync_env);
-                                    tree_node.add_sync_to(node_stmtid, node.get_stmtid(), sync_env.clone());
-                                    prereqs.push((node_stmtid, sync_env));
+                                    for var in sync_env.into_iter() {
+                                        tree_node.add_sync_to(node_stmtid, node.get_stmtid(), Environment::new(vec![var.clone()]));
+                                        prereqs.push((node_stmtid, Environment::new(vec![var])));
+                                    }
                                 } else {
                                     panic!();
                                 }
@@ -368,7 +370,7 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
                             }
                         }
                     }
-                    assert!(prereqs.len() + 1 == best_nodes_ids.len());
+                    //assert!(prereqs.len() + 1 == best_nodes_ids.len());
                     if prereqs.len() > 0 {
                         eprintln!("Had prereqs: {:?}", prereqs);
                     }
@@ -394,7 +396,7 @@ fn maximum_spanning_trees<'a>(schedule_trees: &mut Vec<ScheduleTree<'a>>,
         });
 
         // Check to see if nothing was added in the last iteration
-        if num_remaining == dependent_nodes.len() {
+        if num_remaining <= dependent_nodes.len() {
             panic!("Stuck in an infinite loop");
         }
     }

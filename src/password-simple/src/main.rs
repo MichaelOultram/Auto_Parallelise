@@ -11,7 +11,7 @@ use std::time::Instant;
 fn hash(word: String) -> String {
     let mut hash_word: String = word;
     // Hash word using Sha256
-    for _ in 0..10000 {
+    for _ in (0..10000).rev() { // Disable this for loop as type inference uses type str
         let mut hasher = Sha256::new();
         hasher.input_str(&hash_word);
         hash_word = String::from(hasher.result_str());

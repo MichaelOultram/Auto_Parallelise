@@ -17,7 +17,7 @@ fn block_to_string(block: &Block, printid: &mut u32) -> String {
 lazy_static! {
     static ref ALPHABET: Vec<&'static str> = "a b c d e f g h i j k l m n o p q r s t u v w x y z".split_whitespace().collect();
 
-    static ref STMT_KIND_LIST: Vec<&'static str> = vec!["NewVar", "Assignment", "ForRange", "ForList", "IfLtElse", "Push", "Pop", "Print"];
+    static ref STMT_KIND_LIST: Vec<&'static str> = vec!["NewVar", "Assignment", "Push", "Pop", "Print"]; // "ForRange", "ForList", "IfLtElse",
 
     static ref EXPR_KIND_LIST: Vec<&'static str> = vec!["Value", "StdinValue", "Var", "Add", "Mul", "Sub"];
 }

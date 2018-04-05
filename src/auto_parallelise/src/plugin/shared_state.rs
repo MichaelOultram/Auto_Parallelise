@@ -61,7 +61,7 @@ impl Config {
         Config {
             plugin_enabled: true,
             parallel_function_body: false,
-            parallel_for_loops: true,
+            parallel_for_loops: false,
         }
     }
 
