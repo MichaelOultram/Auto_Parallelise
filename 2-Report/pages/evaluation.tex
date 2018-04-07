@@ -204,6 +204,7 @@ Each randomly generated sequential program was executed sequentially and in para
 The results show that the parallel version is slower which is to be expected for this program. The overhead of running this example in parallel is approximately $14.5\%$.
 
 \subsection{Password Cracker}
+\label{sec:evaluation-results-password-cracker}
 % seq_no_o = 2:09.28
 % seq_o = 3.975
 % par_no_o = 13.724
@@ -221,7 +222,8 @@ The results show that the parallel version is slower which is to be expected for
     \hline
 \end{tabularx}
 
-Due to the larger problem size, the program was only run once instead of the $1000$ times that all the other programs were tested with. This is the only program I have that shows a speedup when run in parallel. The parallel version without parallel for loops is slightly slower than the sequential version without and with compiler optimisations. Looking at the versions without compiler optimisations, the sequential version is very slow giving the parallel version with parallel for loops a speedup of $9.42$. Even when the compiler optimisations are enabled, the parallel version with parallel for loops is $4.11$ times faster. This speedup shows that the parallelising compiler can beat the rust compiler under some circumstances. Originally I attempted to test with a dictionary size of $2150838$ words, but later I reduced it to $5000$ words. The parallel version with parallel for loops tries to hash each word in a separate thread, and so the program was crashing when it could not spawn over $2$ million threads. This is a limitation of the design that is looked at in \autoref{sec:discussion}.
+Due to the larger problem size, the program was only run once instead of the $1000$ times that all the other programs were tested with. This is the only program I have that shows a speedup when run in parallel. The parallel version without parallel for loops is slightly slower than the sequential version without and with compiler optimisations. Looking at the versions without compiler optimisations, the sequential version is very slow giving the parallel version with parallel for loops a speedup of $9.42$. Even when the compiler optimisations are enabled, the parallel version with parallel for loops is $4.11$ times faster. This speedup shows that the parallelising compiler can beat the Rust compiler under some circumstances.
+The parallel version with paralel for loops did not compile correctly on its own. One of the synclines for the for loop sends the dictionary between iterations. Rust has type inference, but it fails to work out the type in this case. I manually annotated the type for this syncline and then it compiled just fine. Originally I attempted to test with a dictionary size of $2150838$ words, but later I reduced it to $5000$ words. The parallel version with parallel for loops tries to hash each word in a separate thread, and so the program was crashing when it could not spawn over $2$ million threads. Both these limitations of the design are looked at in \autoref{sec:discussion}.
 
 \subsection{Automatically Generated Sequential Programs}
 The first set of programs was tested at $8$ different complexities in the range $25$--$200$.

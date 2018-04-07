@@ -29,7 +29,7 @@ At the top of every function, add: \\
 Compile the code once to run the analysis stage: \\
 \texttt{cargo build --release} \\
 
-Normally you would compile the code again with the same command to apply the modifications but due to a bug in the rust nightly compiler (\href{https://github.com/rust-lang/rust/issues/46489}{$\#46489$}), this doesn't work. Instead you must pipe stdout into a file: \\
+Normally you would compile the code again with the same command to apply the modifications but due to a bug you must pipe stdout into a file instead:\\
 \texttt{cargo build --release > parallel\_code.rs} \\
 
 Normally you would just run the parallelised code but due to the bug, you will need to create a new project and copy \texttt{parallel\_code.rs} along with any imports. Then you can: \\

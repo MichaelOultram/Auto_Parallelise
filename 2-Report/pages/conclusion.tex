@@ -1,7 +1,12 @@
 \chapter{Conclusion}
-The problem that I wanted to tackle was automatically converting sequential program into a parallelised program. This is a hard problem which is well established in the field of computer science. There are many different approaches explored in the literature, but I focused on converting the sequential source code automatically. Rust was chosen as the programming language used due to its memory management features and thread safety. Features of a parallelising compiler which would convert a sequential rust programs into a parallelised rust program was designed.  I chose to implement the design using a compiler plugin. While this did give me all the information required for dependency analysis, it was very complicated and difficult to access. Using the compiler plugin required me to deal with all of the syntax sugar, dramatically increasing the number of cases I had to deal with.
+\todo{PROOF READ UP TO HERE}
+
+The problem that I wanted to tackle was automatically converting sequential program into a parallelised program. This is a hard problem which is well established in the field of computer science. There are many different approaches explored in the literature, but I focused on converting the sequential source code automatically. Rust was chosen as the programming language used due to its memory management features and thread safety. Features of a parallelising compiler which would convert a sequential Rust program into a parallelised Rust program was designed and implemented using a compiler plugin. While this did give me all the information required for dependency analysis, it was very complicated and difficult to access. Using the compiler plugin required me to deal with all of the syntax sugar, dramatically increasing the number of cases I had to deal with. Most of the dependencies are detected by just looking at variables alone.
+
+
+
+My implementation could be improved in many ways. Ordering external functions will fix some of the differences between the sequential and parallel program at the cost of forcing some dependencies that might not be necessary.
 
 \todo{Write conclusion}
 
 % Say there is hope for the approach.
-% Most of the dependencies are detected by just looking at variables. Can be improved by ordering external functions. Still would not fix timing circuit.
