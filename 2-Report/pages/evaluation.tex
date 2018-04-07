@@ -96,15 +96,186 @@ The \texttt{dictionary} and \texttt{password\_hash} variables are requested on t
 \end{figure}
 
 \subsection{Automatically Generated Sequential Programs}
-\todo{PROOF READ UP TO HERE}
+To verify that the parallelising compiler can parallelise more that the programs shown above, it was tested against a collection of randomly generated sequential programs with increasing complexity. The first set of programs only contained variable creation, variable assignment and printing arbitrary expressions. A list was added at the beginning of the program which puts the command line arguments into an array. This was used to add some consistent dynamic element that the compiler optimisations would not be able to optimise out. The second set of programs added for loops and if statements, which allows for nested blocks. I tested these programs without parallel for loop optimisations enabled. The third set uses the same sequential programs as the second set but it has parallel for loop optimisations enabled. The complexity value varies for each program within each set. This affects how many statements are generated in the sequential source code. Listing \autoref{code:genprogram1} is an example of a generated program from the first set. Listing \autoref{code:genprogram2} is an example from the second/third set.
 
-To verify that the parallelising compiler can parallelise more that the programs shown above, it was tested against $1428$ randomly generated sequential programs. Each randomly generated sequential program was executed sequentially and in parallel, with and without compiler optimisations to compare the outputs. This is to verify that the program semantics remains the same. The sequential and parallel program was run $1000$ times, and their execution time was recorded. The number of concurrent threads executed was also recorded for the parallel program. I am not expecting a speedup in the parallel programs as the size of the problem remained fairly small, and is probably not enough to overcome the thread overhead. The more interesting value will be the number of concurrent threads executed, as this shows how much parallelism the parallelising compiler could find in the sequential program. It gives us a gauge on how fast the parallel version could be if there was no thread overhead.
+\begin{code}
+\begin{minted}{rust}
+fn main() {
+    let stdin: Vec<i32> = ::std::env::args().skip(1).map(|i| i.parse::<i32>().unwrap()).collect();
+    {
+        println!("00000000: (stdin[0]) - (stdin[4]) = {:?}", (stdin[0]) - (stdin[4]));
+        println!("00000001: (stdin[17]) - (((4) + (1)) - (-4)) = {:?}", (stdin[17]) - (((4) + (1)) - (-4)));
+        println!("00000002: (stdin[8]) - (1) = {:?}", (stdin[8]) - (1));
+        let mut s: i32 = 0;
+        s = stdin[9];
+        println!("00000003: ((8) * (9)) - ((s) * (1)) = {:?}", ((8) * (9)) - ((s) * (1)));
+        let mut u: i32 = 0;
+        println!("00000004: u = {:?}", u);
+        let mut a: i32 = 0;
+        let mut z: i32 = 0;
+        println!("00000005: s = {:?}", s);
+        println!("00000006: u = {:?}", u);
+        println!("00000007: a = {:?}", a);
+        println!("00000008: z = {:?}", z);
+    }
+}
+\end{minted}
+\caption{\label{code:genprogram1}Example generated sequential program from first set with $10$ complexity}
+\end{code}
 
-\todo{Show example of a randomly generated program?}
+\begin{code}
+\begin{minted}{rust}
+fn main() {
+    let stdin: Vec<i32> = ::std::env::args().skip(1).map(|i| i.parse::<i32>().unwrap()).collect();
+    {
+        println!("00000000: 1 = {:?}", 1);
+        for mut y in 0.max(stdin[7])..100.min(stdin[13]) {
+            {
+                if (((stdin[12]) + (stdin[13])) - (((-1) - (-8)) + (stdin[3]))) < (stdin[3]) {
+                    if (-4) < (stdin[7]) {}
+                }
+                println!("00000001: ((stdin[19]) - ((-7) * (8))) + (((8) - (-5)) * (stdin[4])) = {:?}", ((stdin[19]) - ((-7) * (8))) + (((8) - (-5)) * (stdin[4])));
+                let mut d: i32 = 0;
+                println!("00000002: d = {:?}", d);
+            }
+        }
+        let mut y: i32 = 0;
+        for mut f in 0.max((((-1) + (-3)) - ((-4) * (-1))) + (7))..100.min(y) {
+            {
+                let mut m: i32 = 0;
+                let mut p: i32 = 0;
+                if (stdin[1]) < (((stdin[1]) * ((0) + (-4))) - (y)) {
+                    println!("00000003: stdin[7] = {:?}", stdin[7]);
+                    println!("00000004: y = {:?}", y);
+                    println!("00000005: m = {:?}", m);
+                    println!("00000006: p = {:?}", p);
+                }
+                println!("00000007: y = {:?}", y);
+                println!("00000008: m = {:?}", m);
+                println!("00000009: p = {:?}", p);
+            }
+        }
+        y = y;
+        for mut g in 0.max(((y) + ((2) * (3))) - (stdin[14]))..100.min((y) * ((8) * (stdin[15]))) {
+            {
+                if (y) < (-9) {
+                    let mut n: i32 = 0;
+                    println!("00000010: y = {:?}", y);
+                    println!("00000011: n = {:?}", n);
+                }
+                println!("00000012: stdin[6] = {:?}", stdin[6]);
+                for mut c in 0.max(y)..100.min((((-4) * (-3)) - ((0) + (9))) + (((2) + (1)) + (-2))) {
+                    {
+                        if ((((6) + (2)) - ((7) - (-9))) * (((6) + (-2)) - ((1) * (-10)))) < ((((8) - (4)) - ((-2) - (7))) - (-10)) {
+                            println!("00000013: y = {:?}", y);
+                        }
+                        println!("00000014: y = {:?}", y);
+                    }
+                }
+                println!("00000015: y = {:?}", y);
+            }
+        }
+        println!("00000016: y = {:?}", y);
+    }
+}
+\end{minted}
+\caption{\label{code:genprogram2}Example generated sequential program from second and third set with $6$ complexity}
+\end{code}
+
+Each randomly generated sequential program was executed sequentially and in parallel, with and without compiler optimisations to compare the outputs. This is to verify that the program semantics remains the same. The sequential and parallel program was run $1000$ times, and their total execution time was recorded. Each parallel program source code was statically analysed to count the number of threads created and the number of synclines used. If the thread was defined inside a for loop, it would create more than one thread, but only one thread would be counted. I am not expecting a speedup in the parallel programs as the problem complexity remained fairly small, and is probably not enough to overcome the thread overhead. The more interesting value will be the number of threads and synclines as this gives an indication of how much parallelism the parallelising compiler could find in the sequential program. It gives us a gauge on how fast the parallel version could be if there was no thread overhead.
 
 \section{Results}
-\todo{Include results from simple example}
+\subsection{Simple Example}
+% seq_no_o = 0.953
+% seq_o = 0.992
+% par_no_o = 1.131
+% par_o = 1.144
 
-\todo{Include results from password-cracker}
+\begin{tabularx}{\textwidth}{ | >{\centering\arraybackslash}X | >{\centering\arraybackslash}X | >{\centering\arraybackslash}X |}
+	\hline
+    Runtime Results & Without Optimisations & With Optimisations \\
+    \hline
+    Sequential Version & $0.953$s & $0.992$s \\
+    \hline
+    Parallel Version   & $1.131$s & $1.144$s \\
+    \hline
+\end{tabularx}
 
-\todo{Include results from automated testing}
+The results show that the parallel version is slower which is to be expected for this program. The overhead of running this example in parallel is approximately $14.5\%$.
+
+\subsection{Password Cracker}
+% seq_no_o = 2:09.28
+% seq_o = 3.975
+% par_no_o = 13.724
+% par_o = 0.966
+
+\begin{tabularx}{\textwidth}{ | >{\centering\arraybackslash}X | >{\centering\arraybackslash}X | >{\centering\arraybackslash}X |}
+	\hline
+    Runtime Results & Without Optimisations & With Optimisations \\
+    \hline
+    Sequential Version & $2$m $9.28$s & $3.975$s \\
+    \hline
+    Parallel Version \hspace{5em} Without Parallel For Loops & $2$m $22.53$s & $4.485$s \\
+    \hline
+    Parallel Version \hspace{5em} With Parallel For Loops & $13.724$s & $0.966$s \\
+    \hline
+\end{tabularx}
+
+Due to the larger problem size, the program was only run once instead of the $1000$ times that all the other programs were tested with. This is the only program I have that shows a speedup when run in parallel. The parallel version without parallel for loops is slightly slower than the sequential version without and with compiler optimisations. Looking at the versions without compiler optimisations, the sequential version is very slow giving the parallel version with parallel for loops a speedup of $9.42$. Even when the compiler optimisations are enabled, the parallel version with parallel for loops is $4.11$ times faster. This speedup shows that the parallelising compiler can beat the rust compiler under some circumstances. Originally I attempted to test with a dictionary size of $2150838$ words, but later I reduced it to $5000$ words. The parallel version with parallel for loops tries to hash each word in a separate thread, and so the program was crashing when it could not spawn over $2$ million threads. This is a limitation of the design that is looked at in \autoref{sec:discussion}.
+
+\subsection{Automatically Generated Sequential Programs}
+The first set of programs was tested at $8$ different complexities in the range $25$--$200$.
+\autoref{fig:gen-par-success-1}, \autoref{fig:gen-par-success-2} and \autoref{fig:gen-par-success-3} shows how many of the programs were successfully compiled. The number of successful compiles for the parallel version is reduced significantly with an increased complexity. There was always $51$ programs generated for each complexity, but sometimes the number of sequential programs is lower. We would expect every sequential program to be successful. In the cases it fails, either the sequential code generator had a bug, or the output of the program was different between the sequential and parallel version. Either way, it only occurred $16$ out of the $1428$ generated programs.
+
+\autoref{fig:gen-avg-runtime-1}, \autoref{fig:gen-avg-runtime-2} and \autoref{fig:gen-avg-runtime-3} shows the average runtime for each complexity. In almost all of the complexities, the sequential version has a constant time. The parallel version tends to have an increase in runtime when the complexity increases and spikes on some complexities. Since the number of successful parallel compiles is reduced when the complexity is increased, the result becomes less reliable. Some of the spikes in runtime show how badly the parallel version can perform in some cases.
+\autoref{fig:gen-thread-count-1}, \autoref{fig:gen-thread-count-2} and \autoref{fig:gen-thread-count-3} shows the number of threads and synclines found when statically analysing the parallel source code. The parallel programs that failed to compile are include in these results. For the first set of generated programs, the increase in complexity increases the number of threads/synclines linearly. The number of synclines increases at a slightly lower rate indicating the more complex the program, the more parallelisable it is. For the second and third set of generated programs, the increase in the number of theads is exponential. For loops are a big target for parallel optimisation, especially if each iteration is separated. Comparing the second set with the third set of generated programs, the number of threads is slightly higher for the third set.
+The number of synclines are higher for the third set as each variable needs to be passed between iterations of the parallel for loops.
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/par-success-1.png}
+    \caption{\label{fig:gen-par-success-1}Number of program successfully parallelised for the first program set}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/avg-runtime-1.png}
+    \caption{\label{fig:gen-avg-runtime-1}Average runtime for the first program set}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/thread-count-1.png}
+    \caption{\label{fig:gen-thread-count-1}Average number of threads and synclines for the first program set}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/par-success-2.png}
+    \caption{\label{fig:gen-par-success-2}Number of program successfully parallelised for the second program set}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/avg-runtime-2.png}
+    \caption{\label{fig:gen-avg-runtime-2}Average runtime for the second program set}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/thread-count-2.png}
+    \caption{\label{fig:gen-thread-count-2}Average number of threads and synclines for the second program set}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/par-success-3.png}
+    \caption{\label{fig:gen-par-success-3}Number of program successfully parallelised for the third program set}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/avg-runtime-3.png}
+    \caption{\label{fig:gen-avg-runtime-3}Average runtime for the third program set}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{img/generated/thread-count-3.png}
+    \caption{\label{fig:gen-thread-count-3}Average number of threads and synclines for the third program set}
+\end{figure}

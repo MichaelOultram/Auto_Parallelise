@@ -1,4 +1,6 @@
 \chapter{Discussion}
+\label{sec:discussion}
+\todo{PROOF READ UP TO HERE}
 \section{Achievements}
 As shown in the \hyperref[sec:evaluation]{evaluation section} of the report, my solution manages to separate inter-weaved programs pretty well. It tries to run as much as possible in parallel, and creates syncs for dependencies in different threads. If one statement directly depends on another, then it is placed in the same thread to try to reduce the number of unnecessary threads. Not all programs will compile as not all of the rust language features are implemented properly in the parallelising compiler. One great achievement that I am particularly proud of is the parallel for loops as it was very late into the project before I managed to get them to partially work. Getting the parallelising compiler to work on simple examples took longer than I originally thought, and for a few weeks I had no idea how I was going to parallelise for loops. Once I could parallelise for loops (even partially), I had an example that was not too specifically coded that ran faster parallelised.
 
