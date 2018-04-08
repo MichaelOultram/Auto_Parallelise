@@ -4,7 +4,7 @@ Processors have been gaining more multi-core performance which sequential code c
 
 The author introduces a new design for a parallelising compiler for the Rust programming language. The design focuses on safe statement level parallelism using a dependency analysis stage and a scheduling stage. The dependency analysis stage looks at each function individually for statements that use the same variables. The scheduling algorithm takes the dependency tree and tries to run as much as possible in separate threads using a ``maximum spanning tree" approach for any statement with multiple dependencies.
 
-The design chosen was implemented using the plugin system for the rust compiler. Several adaptations were made to the design due to unforeseen complexities with the compiler. The end result was evaluated by testing in detail two example sequential programs as well as testing robustness using randomly generated sequential programs. \todo{Include results in abstract}
+The design chosen was implemented using the plugin system for the rust compiler. Several adaptations were made to the design due to unforeseen complexities with the compiler. The end result was evaluated by testing in detail two example sequential programs as well as testing robustness using randomly generated sequential programs. These tests shows the potential parallelisability of the programs, and one example produces a faster program runtime. Most of the programs tested have a slower runtime, and sometimes the parallel code produced does not even compile. The problems with the implementation are discussed, and how changes to the design could end up with a more successful solution.
 
 \begin{center}
 All software for this project can be found at \\
