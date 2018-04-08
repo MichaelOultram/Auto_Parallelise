@@ -1,34 +1,33 @@
 \chapter{Introduction}
-Processors have been gaining more multi-core performance which sequential code cannot take advantage of. Parallel code that can take advantage of the additional cores is more difficult than sequential code for the programmer to write. To increase the performance of the many existing sequential programs, they would need to be adapted/rewritten. Ideally we want an easy way to convert the easy to write (and existing) sequential code into parallelised code that can take advantage of the additional cores.
-The problem is well established in computer science and has many solutions. The solution that this report focuses on is using a parallelising compiler to convert sequential source code into a parallelised binary. Research done in this field has mostly focused on the C++ language although other researchers have had success using other languages. Some methods require manual annotation of the source code by the programmer to specify which parts of the program are parallelisable. Others have attempted to automatically detect these areas, but with an unsafe language like C++ it is challenging.
+\textcite{Kish2002} estimated the end of Moore's Law of miniaturization within 6-8 years or earlier (based on their publication date) and as such, manufacturers have been increasing processors' core count to increase processor performance \parencite{Geer2005}. Writing parallelised programs to take advantage of these additional cores has some difficulty and often requires significant changes to the source code. Ideally we want a simpler way to convert the easier to write (and existing) sequential code into parallelised code that can take advantage of the additional cores. The problem is well established in computer science and has many solutions. The solution that this report focuses on is using a parallelising compiler to convert sequential source code into a parallelised binary. Research done in this field has mostly focused on the C++ language although other researchers have had success using other languages. Some methods require manual annotation of the source code by the programmer to specify which parts of the program are parallelisable whilst others have attempted to automatically detect these areas, but with an unsafe language like C++ this is challenging.
 
 \section{Related Work}
 \label{sec:related-work}
 
 \subsection{Parallelisation Models}
 \label{sec:related-models}
-In this section, we look at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimising memory access patterns for multiple threads can increase performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel threads are `undone' and rerun.
+This section looks at theoretical models of automatic parallelism. The static parallelism subsection shows related work where the schedule is fixed and calculated at `compile' time. It is shown how rearranging loop iterations and optimising memory access patterns for multiple threads can increase performance. The speculative parallelism subsection shows related work where the schedule is more flexible. This kind of parallelism tries to run dependent tasks in parallel and detecting when there is a conflict. When a conflict occurs, some parallel threads are `undone' and rerun.
 
 \subsubsection{Static parallelism}
 % Polyhedral model and affine transformation
 \textcite{Feautrier1992} describes one model of a parallel program as a set of operations $\Omega$ on an initial store, and a partial ordering binary relation $\Gamma$ also known as a dependency tree. It is shown that this basic model of a parallel is equivalent to affine scheduling, where $\Omega$ and $\Gamma$ are described as linear inequalities. Finding a solution where these linear inequalities hold produces a schedule for the program where dependent statements are executed in order. There are some programs where no affine schedule exists.
-\textcite{Bondhugula2008} uses the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed to minimise the communication between threads, further increasing the performance of the parallelised code.
+\textcite{Bondhugula2008} use the affine scheduling model on perfectly, and imperfectly nested loops. They describe the transformations needed to minimise the communication between threads, further increasing the performance of the parallelised code.
 
 % Iteration space slicing > affine transformations
-An alternative method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. ``Iteration space slicing takes dependency information as input to find all statement instances from a given loop nest which must be executed to produce the correct result''. \textcite{Pugh1997} shows how this information can be used to transform loops on example programs to produce a real world speedup. \textcite{Beletska2011} shows that iteration space slicing extracts more coarse-grained parallelism than affine scheduling.
+An alternative method to affine scheduling is iteration space slicing introduced by \textcite{Pugh1997}. ``Iteration space slicing takes dependency information as input to find all statement instances from a given loop nest which must be executed to produce the correct result''. \textcite{Pugh1997} show how this information can be used to transform loops on example programs to produce a real world speedup. \textcite{Beletska2011} show that iteration space slicing extracts more coarse-grained parallelism than affine scheduling.
 
 \subsubsection{Speculative parallelism}
 % Third option: Speculation
-\textcite{Zhong2008} shows that there is some parallelisable parts hidden in loops that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that same location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
+\textcite{Zhong2008} show that there is some parallelisable parts hidden in loops that affine scheduling and iteration space splicing cannot find. They propose a method that runs future loop iterations in parallel with past loop iterations. If a future loop iteration accesses some shared memory space, and then a past iteration modifies that same location, the future loop iteration is `undone' and restarted. It is shown that this method increases the amount of the program that is parallelised.
 
-\textcite{Prabhu2010} introduce two new language constructs for C\# to allow the programmer to manually specify areas of the program that can be speculatively parallelised. \textcite{Yiapanis2015} designs a parallelising compiler which can automatically take advantage of speculative parallelism.
+\textcite{Prabhu2010} introduce two new language constructs for C\# to allow the programmer to manually specify areas of the program that can be speculatively parallelised. \textcite{Yiapanis2015} designed a parallelising compiler which can automatically take advantage of speculative parallelism.
 
 \subsection{Parallelisation Implementations}
-In this section we look at: parallelising compilers which focus on parallelising FORTRAN programs; OpenMP which is an model for shared memory programming and parallelising compilers which convert sequential CPU code into parallelised GPU code. Some of these parallelising compilers are based off of models described in the \hyperref[sec:related-models]{Related Models} section.
+This sections looks at: parallelising compilers which focus on parallelising FORTRAN programs; OpenMP which is a model for shared memory programming and parallelising compilers which converts sequential CPU code into parallelised GPU code. Some of these parallelising compilers are based on models described in \autoref{sec:related-models}.
 
-\textcite{Eigenmann1998} manually parallelises the PERFECT benchmarks for FORTRAN which are compared with the original versions to calculate the potential speedup of an automatic parallelising compiler.
-\textcite{DHollander1998} developed a FORTRAN transformer which reconstructs code using \texttt{GOTO} statements so that more parallelisms can be detected. It performs dependency analysis and automatically parallelised loops by splitting the task into jobs. These jobs can be split between networked machines to run more jobs concurrently.
-\textcite{Rauchwerger1999} introduce a new language construct for FORTRAN programs which allows for run-time speculative parallelism on for loops. Their implementation parallelises some parts of the PERFECT benchmarks which existing parallelising compilers of the time could not find.
+\textcite{Eigenmann1998} manually parallelise the PERFECT benchmarks for FORTRAN which are compared with the original versions to calculate the potential speedup of an automatic parallelising compiler.
+\textcite{DHollander1998} developed a FORTRAN transformer which reconstructs code using \texttt{GOTO} statements so that more parallelisms can be detected. It performs dependency analysis and automatically created parallel loops by splitting the task into jobs. These jobs can be split between networked machines to run more jobs concurrently.
+\textcite{Rauchwerger1999} introduce a new language construct for FORTRAN programs which allows for run-time speculative parallelism on `for' loops. Their implementation parallelises some parts of the PERFECT benchmarks which existing parallelising compilers of the time could not find.
 
 \textcite{Quinones2005} introduce the Mitosis compiler which combines speculation with iteration space slicing. There is always only one non-speculative thread which is seen as the base execution; all other threads are speculative. The Mitosis compiler computes the probability of two iterations conflicting. If this probability is low, and there is a spare thread unit, then the loop iteration is executed in parallel. The non-speculative thread detects any conflicts as it is the only thread that can commit results.
 
@@ -37,13 +36,13 @@ In this section we look at: parallelising compilers which focus on parallelising
 \textcite{Lam2011} extends OpenMP using machine learning to automate the parallelisation. The system is trained using a set containing programs already parallelised using OpenMP. The knowledge learned is applied to sequential programs to produce parallelised programs.
 
 \pagebreak % Used so that the next page isn't just 2 lines
-A CPUs architecture is typically optimised for latency whereas a GPUs architecture is typically optimised for throughput. This can make GPUs perform much better that CPUs for certain types of task. \textcite{Baskaran2010} uses the affine transformation model to convert sequential C code into parallelised CUDA code. \texttt{For} loops are tiled for efficient execution on the GPU.
+A CPUs architecture is typically optimised for latency whereas a GPUs architecture is typically optimised for throughput. This can make GPUs perform much better that CPUs for certain types of task. \textcite{Baskaran2010} uses the affine transformation model to convert sequential C code into parallelised CUDA code. `For' loops are tiled for efficient execution on the GPU.
 
 \section{Rust Programming Language}
 \label{sec:rust-language-features}
-Rust is a fairly new systems programming language with a focus on thread safety. Variables have an ownership and a lifetime which allows only one block to access the variable at once. This is guaranteed at compile time and should make the process of automatically detecting dependencies much easier than some of the approaches described in the \hyperref[sec:related-work]{Related Work} section. To test this hypothesis, the author proposes a design for a new paralleling compiler using the rust programming language. The rust nightly compiler allows for plugins which allows the author to implement their design as compiler plugins have modification access to the abstract syntax tree.
+Rust is a fairly new systems programming language with a focus on thread safety. Variables have an ownership and a lifetime which allows only one block to access the variable at once. This is guaranteed at compile time and should make the process of automatically detecting dependencies much easier than some of the approaches described in \autoref{sec:related-work}. To test this hypothesis, the author proposes a design for a new paralleling compiler using the Rust programming language. The Rust nightly compiler has a feature which allows for plugins to access the internals of the compiler including modification access of the abstract syntax tree. This feature allows the author to implement their design.
 
-The rust programming language is similar to C++ but it has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. If the reader requires more in depth understanding than what is provided, then they should look at the language documentation, \textcite{rustbook}.
+The Rust programming language is similar to C++ but it has some specific features that may not be known to the reader. This section briefly explains features of the language that are used in later sections of the report. If the reader requires more in depth understanding than what is provided, then they should look at the language documentation, \textcite{rustbook}.
 
 %\subsection{Safety Features}
 %``Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety'' \parencite{rustlang}. To get these safety properties, rust has some unique features. The biggest difference to other programming languages is how variable are handled.
@@ -58,7 +57,7 @@ fn main() {
     f(&a);
     g(a.clone());
     h(a);
-    // Cannot access a here anymore
+    // Cannot access `a` here anymore
 }
 
 // 'f' borrows 'a'
@@ -67,7 +66,7 @@ fn f(a: &Vec<u32>){}
 // 'g' takes ownership of a copy of `a`
 fn g(a: Vec<u32>){}
 
-// 'h' takes ownership of a
+// 'h' takes ownership of `a`
 fn h(a: Vec<u32>){}
 \end{minted}
 \caption{Borrowing and moving example}
@@ -79,7 +78,7 @@ When \texttt{h} is called with parameter \texttt{a}, the variable is moved to \t
 The \texttt{g} function also wants to take ownership of the variable \texttt{a}, but we want the \texttt{main} method to keep the ownership. To do this, \texttt{a} is cloned and this copy is moved into \texttt{g}. If the type of \texttt{a} implemented the \texttt{Copy} trait, then the compiler would automatically clone the variable instead of moving, allowing access to \texttt{a} after the \texttt{h} function call.
 
 \subsection{Mutability}
-Variables mutability is declared when the variable is declared. In rust, variables are immutable by default, but if specified they are mutable. When a variable is borrowed, it can either be immutably borrowed or mutably borrowed (if the variable itself is mutable).
+Variables mutability is declared when the variable is declared. In Rust, variables are immutable by default, but if specified they are mutable. When a variable is borrowed, it can either be immutably borrowed or mutably borrowed (if the variable itself is mutable).
 
 \begin{code}
 \begin{minted}{rust}
@@ -108,7 +107,7 @@ fn g(b: &mut u32) {
 In the \texttt{main} method of this example, \texttt{a} is an immutable local variable and \texttt{b} is a mutable local variable. The \texttt{f} function borrows both \texttt{a} and \texttt{b} immutably. Even though \texttt{b} is declared as mutable, it cannot be changed inside \texttt{f}. Once \texttt{f} returns, \texttt{b} becomes mutable again inside the \texttt{main} method. The \texttt{g} function shows how \texttt{b} can be borrowed mutably. Any changes to \texttt{b} inside \texttt{g} would be reflected in the \texttt{main} method as expected.
 
 \subsection{Unsafe Blocks}
-Some features required of a systems programming language are not safe. Rust allows the programmer to turn off some of rust's safety features by using an unsafe block. The most common use of an unsafe block is to modify a mutable static variable but it also allows de-referencing of a raw pointer and calling unsafe functions (i.e. an external c function). Using unsafe blocks may introduce race conditions as two threads could try to modify a global at the same time, and the rust language would not guarantee an order.
+Some features required of a systems programming language are not safe. Rust allows the programmer to turn off some of Rust's safety features by using an unsafe block. The most common use of an unsafe block is to modify a mutable static variable but it also allows de-referencing of a raw pointer and calling unsafe functions (i.e. an external c function). Using unsafe blocks may introduce race conditions as two threads could try to modify a global at the same time, and the Rust language would not guarantee an order.
 
 \begin{code}
 \begin{minted}{rust}
@@ -132,7 +131,7 @@ unsafe fn inc_global() {
 \end{code}
 
 \subsection{Threads}
-Due to ownership model in rust, only one thread can have access to a variable safely at once. When the thread is spawned, all variables referenced are moved into the thread. A channels are used to communicate between spawned threads and can move a variable from one thread to another. For the variable to be sent via a channel, it must implement the \texttt{Send} trait.
+Due to ownership model in Rust, only one thread can have access to a variable safely at once. When the thread is spawned, all variables referenced are moved into the thread. A channels are used to communicate between spawned threads and can move a variable from one thread to another. For the variable to be sent via a channel, it must implement the \texttt{Send} trait.
 
 \begin{code}
 \begin{minted}{rust}
@@ -154,4 +153,4 @@ fn main() {
 \caption{An example using threads and a channel}
 \end{code}
 
-In this example, a channel is created with a \texttt{sender} and \texttt{receiver} variable. A new thread is spawned which takes ownership of the \texttt{receiver} variable. This thread receives a value \texttt{a}, and returns $2\times\texttt{a}$. The \texttt{main} method uses the \texttt{sender} variable to send $10$ down the channel. It then uses the \texttt{join\_handle} to wait for the thread to return, and gets its value.
+In this example, a channel is created with a \texttt{sender} and \texttt{receiver} variable. A new thread is spawned which takes ownership of the \texttt{receiver} variable. This thread receives a value \texttt{a}, and returns $2\times\texttt{a}$. The \texttt{main} method uses the \texttt{sender} variable to send $10$ down the channel. It then uses the \texttt{join\_handle} to wait for the thread to return.
